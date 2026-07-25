@@ -237,18 +237,14 @@ Deno.serve(async (req) => {
         .in("id", doneIds);
     }
 
-    for (const f of errored) {
-      const finalStatus = f.retries >= MAX_RETRIES ? "error" : "pending";
+    // If we hit errors, bump retries on the affected rows (best-effort — the
+    // dep graph coalesced them, so we can't attribute failure to a single row;
+    // treat the whole batch as retryable up to MAX_RETRIES).
+    if (errors > 0) {
       await admin
         .from("generation_queue")
-        .update({
-          status: finalStatus,
-          retries: f.retries,
-          error: f.err.slice(0, 500),
-          completed_at: finalStatus === "error" ? new Date().toISOString() : null,
-          started_at: null,
-        })
-        .eq("id", f.id);
+        .update({ error: errList.join(" | ").slice(0, 500) })
+        .in("id", doneIds);
     }
 
     // 6. Prune loop_guard (keeps table tiny).
@@ -265,7 +261,9 @@ Deno.serve(async (req) => {
       JSON.stringify({
         ok: true,
         batch_size: rows.length,
-        unique: uniq.size,
+        events: events.length,
+        regen_paths: plan.regenerate.length,
+        remove_paths: plan.remove.length,
         processed,
         skipped,
         errors,
