@@ -1049,6 +1049,108 @@ export type Database = {
           },
         ]
       }
+      generation_locks: {
+        Row: {
+          acquired_at: string
+          expires_at: string
+          holder: string | null
+          name: string
+        }
+        Insert: {
+          acquired_at?: string
+          expires_at: string
+          holder?: string | null
+          name: string
+        }
+        Update: {
+          acquired_at?: string
+          expires_at?: string
+          holder?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
+      generation_metrics_daily: {
+        Row: {
+          bytes_saved: number
+          bytes_written: number
+          day: string
+          db_reads: number
+          duplicate_enqueues: number
+          errors: number
+          files_generated: number
+          files_skipped: number
+          loops_detected: number
+          updated_at: string
+        }
+        Insert: {
+          bytes_saved?: number
+          bytes_written?: number
+          day: string
+          db_reads?: number
+          duplicate_enqueues?: number
+          errors?: number
+          files_generated?: number
+          files_skipped?: number
+          loops_detected?: number
+          updated_at?: string
+        }
+        Update: {
+          bytes_saved?: number
+          bytes_written?: number
+          day?: string
+          db_reads?: number
+          duplicate_enqueues?: number
+          errors?: number
+          files_generated?: number
+          files_skipped?: number
+          loops_detected?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      generation_queue: {
+        Row: {
+          action: string
+          completed_at: string | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          error: string | null
+          id: number
+          priority: number
+          retries: number
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          completed_at?: string | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          error?: string | null
+          id?: number
+          priority?: number
+          retries?: number
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          completed_at?: string | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          error?: string | null
+          id?: number
+          priority?: number
+          retries?: number
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       growth_config: {
         Row: {
           description: string | null
@@ -1686,6 +1788,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      loop_guard: {
+        Row: {
+          count: number
+          entity_id: string
+          entity_type: string
+          minute_bucket: string
+        }
+        Insert: {
+          count?: number
+          entity_id: string
+          entity_type: string
+          minute_bucket: string
+        }
+        Update: {
+          count?: number
+          entity_id?: string
+          entity_type?: string
+          minute_bucket?: string
+        }
+        Relationships: []
       }
       messages: {
         Row: {
@@ -4750,6 +4873,30 @@ export type Database = {
         }
         Relationships: []
       }
+      static_manifest: {
+        Row: {
+          generated_at: string
+          hash: string
+          path: string
+          size: number
+          version: number
+        }
+        Insert: {
+          generated_at?: string
+          hash: string
+          path: string
+          size?: number
+          version: number
+        }
+        Update: {
+          generated_at?: string
+          hash?: string
+          path?: string
+          size?: number
+          version?: number
+        }
+        Relationships: []
+      }
       subscription_requests: {
         Row: {
           admin_note: string | null
@@ -5790,6 +5937,10 @@ export type Database = {
         | { Args: { schema_name: string; table_name: string }; Returns: string }
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
+      enqueue_generation: {
+        Args: { _action: string; _entity_id: string; _entity_type: string }
+        Returns: undefined
+      }
       enqueue_notification: {
         Args: {
           _actor_id?: string
@@ -6045,9 +6196,14 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      prune_loop_guard: { Args: never; Returns: undefined }
       publish_scheduled_insights: { Args: never; Returns: undefined }
       record_growth_event: {
         Args: { _entity_id?: string; _entity_type?: string; _event: string }
+        Returns: undefined
+      }
+      release_gen_lock: {
+        Args: { _holder: string; _name: string }
         Returns: undefined
       }
       reward_claim_approve: { Args: { _claim_id: string }; Returns: undefined }
@@ -6675,6 +6831,10 @@ export type Database = {
             }
             Returns: undefined
           }
+      try_acquire_gen_lock: {
+        Args: { _holder: string; _name: string; _ttl_seconds: number }
+        Returns: boolean
+      }
       unlockrows: { Args: { "": string }; Returns: number }
       updategeometrysrid: {
         Args: {
