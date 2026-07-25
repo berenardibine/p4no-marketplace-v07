@@ -1,89 +1,79 @@
+# Static Generation Engine V2 — Zero-Loop Architecture
 
-# P4NO Enterprise Traffic Engine V2
+Replaces the current polling/registry-driven generator with a strictly event-driven pipeline. Nothing regenerates on a timer; only real business-data changes (products, services, articles, reels, categories, shops) enqueue work. A single locked worker drains the queue in batches, does dirty-checking, writes only changed files, bumps one manifest version, and invalidates only affected CDN paths.
 
-Goal: public content served exclusively from Vercel Static Files + Edge CDN. Supabase becomes write-only for public browsing. Blob is removed from the public request path. Traffic Guard blocks any public read that would touch Supabase.
+## 1. New database objects
 
-## Architecture (target)
+- `generation_queue` — id, entity_type, entity_id, action (insert/update/delete), priority, status (pending/running/done/error/skipped), created_at, started_at, completed_at, retries, error, dedupe_key (unique on `entity_type|entity_id|action` while status='pending').
+- `static_manifest` — path PK, version bigint, hash text, size int, generated_at. Replaces heavy writes to `static_file_registry`.
+- `generation_locks` — name PK, holder, acquired_at, expires_at. Distributed lock via `INSERT ... ON CONFLICT DO NOTHING` + TTL.
+- `generation_metrics_daily` — date PK, files_generated, files_skipped, db_reads, bytes_written, bytes_saved, errors, loops_detected. One row/day; replaces per-file logging in `static_gen_log`.
+- `loop_guard` — entity_type, entity_id, minute_bucket, count. UPSERT counter; trigger raises alert at >2/min.
 
-```text
-Write path:  App → Supabase → Trigger → static-generate → commit JSON to /public/static → Vercel deploy → Edge CDN
-Read path:   User → Browser Cache → IndexedDB → Edge CDN (/static/*.json) → (miss) → 503 Updating + enqueue regen
-                                                                                    ↑ never Supabase, never Blob
-```
+Triggers on business tables ONLY (`products`, `services`, `insight_articles`, `reels`/product-reels, `categories`, `shops`): AFTER INSERT/UPDATE/DELETE → insert one `generation_queue` row, deduped on pending key. No triggers on registry, manifest, logs, or metrics.
 
-## Scope of change
+## 2. Edge functions
 
-### 1. Static origin migration (Blob → repo /public/static)
-- `static-generate` writes JSON to `/public/static/**` in the repo and commits via a GitHub App (server-side), instead of `put()` to Vercel Blob.
-- Deploy hook auto-triggers Vercel rebuild → Edge CDN serves `/static/*.json` immutably.
-- `manifest.json` served with `no-cache`; every entity file served with `Cache-Control: public, max-age=31536000, immutable` (hashed URL param `?v=<version>`).
-- Remove all Blob reads from client. Remove Blob token from client-visible surface.
+- `static-enqueue` — internal helper; called by trigger via `pg_net` for out-of-tx enqueues where needed.
+- `static-worker` (replaces continuous behavior of `static-generate`):
+  1. Acquire lock `worker:main` (skip if held & not expired).
+  2. Sleep-collect window: pull all `pending` rows created in last 15–30s (batch coalesce).
+  3. Resolve dependency map per entity type (product → `product/{id}`, `products/latest`, `products/popular`, matching `products/category/{slug}`, `homepage`, `search-index`).
+  4. For each target path: read only the changed entity rows from DB, compute content hash, compare to `static_manifest.hash`; skip if identical (increment `files_skipped`).
+  5. Write changed files with new global `manifest_version = now_ms`, update `static_manifest` rows, write single manifest.json.
+  6. Invalidate only the changed CDN paths (Vercel `revalidateTag` / path purge).
+  7. Mark queue rows `done`; on error → `error` + retries++ (max 3, exponential backoff).
+  8. Release lock. Update `generation_metrics_daily` (one UPSERT).
+- `static-full-rebuild` — admin-only, manual, requires admin role; ignores dirty-check.
+- Delete: `static-cleanup` reduced to removing files whose manifest entry was deleted this run.
 
-### 2. Generator surfaces (complete list)
-Aggregates: `homepage.json`, `products.json`, `services.json`, `articles.json`, `reels.json`, `categories.json`, `featured.json`, `latest.json`, `popular.json`, `search-index.json`.
-Per-entity: `products/{id}.json`, `services/{id}.json`, `articles/{slug}.json`, `reels/{id}.json`, `categories/{slug}.json`.
+Worker invocation: `pg_net` from the enqueue trigger fires a single fire-and-forget request; function short-circuits if lock held. No cron. Optional 60s safety cron limited to "process queue if any pending > 60s old" — off by default.
 
-### 3. Incremental regen matrix
-On product write → `product/{id}` + `products` + `latest` + `popular` + `homepage` + `search-index` + `manifest`.
-Analogous matrices for services, articles, reels, categories. Codified in a `REGEN_MATRIX` table in `static-generate`.
+## 3. Removals / replacements
 
-### 4. Manifest v3
-Fields: `version`, `generated_at`, `entities` (path→version+hash), plus aggregate counters (products, services, reels, articles, categories, homepage_version, latest_version, popular_version, featured_version). Client only downloads entities whose version changed.
+- Delete cron jobs that call `static-generate`, `static-consistency`, `static-warm`, `static-integrity` on schedule.
+- `static_file_registry` writes → removed; table kept read-only for migration; new writes go to `static_manifest`.
+- `static_gen_log` per-file inserts → removed; only errors/warnings + one batch summary row.
+- Any code path that regenerates on registry/log/manifest updates → deleted. Enforced by DB rule: triggers only exist on business tables.
 
-### 5. Traffic Guard (strict)
-- New `src/lib/publicRead.ts` = single entry point for all public reads.
-- Order: memory → IndexedDB → static CDN → 503 (enqueue regen). Never Supabase.
-- All existing public hooks (`useAllProducts`, `useCategories`, `usePopularThisWeek`, `useServices`, `useReels`, `useInsights`, search, homepage) refactored to call `publicRead()`.
-- `assertPublicReadOnly()` guard throws in dev if a Supabase select is issued from a public surface; logs a violation in prod (`cdn_metrics`).
-- `STRICT_STATIC_MODE=on` by default in production; toggleable from admin.
+## 4. Client changes
 
-### 6. Deletion pipeline
-On DELETE trigger: remove per-entity JSON, prune from every list JSON in the regen matrix, bump manifest, purge Vercel cache tag (`revalidateTag`), broadcast `manifest_version` so clients evict IDB entries and hard-invalidate service worker cache. Direct visit to deleted entity → 404 (static 404 route).
+- `staticCDN.ts`: unchanged read path (manifest → IDB → CDN). Add: when manifest version bumps, only refetch entities whose per-path version in manifest changed (already partially implemented; harden pruning).
+- `idbCache.ts`: extend prune to also drop entries whose `hash` differs from manifest.
+- Service worker: immutable cache for versioned `/static/*.json?v=`, network-first for `manifest.json`. No polling.
 
-### 7. Validation & self-heal
-`static-integrity` extended: JSON parse check, schema check, empty check, version check. Any failure enqueues regen. Runs hourly; on client 404/503, background enqueue with exponential backoff (already partial — hardened).
+## 5. Admin monitor
 
-### 8. Client cache stack
-- Service worker: stale-while-revalidate for `/static/*.json`, network-first for `manifest.json`.
-- IndexedDB: keyed by entity path + version; bulk prune on manifest version bump (already present — extended to cover new surfaces).
-- Response headers set via `vercel.json` `headers` block.
+`AdminCacheMonitor` additions: queue depth, running job, avg gen time, files generated/skipped today, DB reads, bytes written/saved, loop detections, duplicate enqueues prevented, last error. All from `generation_metrics_daily` + `generation_queue` counts (2 cheap queries).
 
-### 9. Admin monitor V2
-`AdminCacheMonitor` gets new panels: browser/CDN/IDB hit %, static coverage %, regen queue depth, deleted queue, guard violations, blocked requests, Supabase public reads (should be 0), egress $ estimate, top files, p50/p95/p99, 404/503 counters, health scores per subsystem.
+## 6. Safety
 
-### 10. Removal
-- Delete `static-cleanup` blob-listing code; replace with repo file diff cleanup.
-- Remove `@vercel/blob` from all runtime paths (kept only in a one-shot migration function to backfill /public/static from existing blobs).
+- Lock TTL 120s; stale lock auto-expires.
+- Loop guard trigger: if same (entity_type, entity_id) enqueued >2 times in a rolling minute → mark critical, skip generation, log to `generation_metrics_daily.loops_detected`, notify admin.
+- Traffic Guard on worker: if `status='running'` row exists → return 409 "Generation already active".
+- Unique partial index guarantees one pending row per (entity, action).
 
-## Technical notes (for reviewers)
+## 7. Rollout
 
-- Repo commits from edge function require a GitHub App PAT stored as secret `GITHUB_STATIC_TOKEN` + repo/branch config. Alternative: use Vercel's `POST /v13/deployments` with inline files, but repo commits are simpler for diff + rollback.
-- Vercel deploys are ~30-60s. For sub-minute freshness, keep an "override" endpoint that serves the freshly-generated JSON via an edge function for the ~60s window while the static deploy propagates, then transparently switches to `/static/*.json`. This is the only place Blob-style ephemeral storage remains — kept out of public URL space (`/api/fresh/*`).
-- Search index target size: <500 KB gzip. If exceeded, shard by first-letter buckets.
-- SPA fallback stays as-is for HTML routes.
-
-## Rollout
-
-1. Ship generator + `/public/static` writer behind flag `STATIC_ORIGIN=repo`; keep Blob in parallel for one deploy.
-2. Migrate hooks to `publicRead()`. Verify `cdn_metrics.supabase=0` for public routes in staging.
-3. Flip `STRICT_STATIC_MODE=on`.
-4. Remove Blob origin. Delete Blob backfill function after one week.
-
-## Out of scope (unchanged)
-
-Auth, wallet, referral, checkout, admin — all continue to hit Supabase directly (write path). No business-logic changes.
+1. Migration: create new tables, triggers, lock, metrics, loop guard. GRANTs + RLS.
+2. Ship `static-worker` + `static-full-rebuild`; keep old `static-generate` in place but behind flag `LEGACY_GEN=off`.
+3. Cut triggers over to enqueue-only. Disable all schedule crons for generation.
+4. Observe 24h: queue drains, no loops, `db_reads` low.
+5. Delete legacy functions and registry writes.
 
 ## Success gates
 
-- `cdn_metrics` shows `supabase_public_reads = 0` for 24h.
-- Blob egress = 0.
-- Deleted product invisible within one deploy cycle (<90s).
-- CDN hit rate ≥ 95%, homepage TTFB < 300ms from Edge.
+- Zero scheduled generation invocations in 24h.
+- `loops_detected = 0`.
+- `files_skipped / (files_skipped + files_generated) > 0.7` on steady state.
+- PostgREST public reads ≈ 0 (already gated by strict static mode).
+- Deleted entity gone from CDN within one worker cycle (<60s).
 
 ---
 
-This is a multi-day migration touching ~30 files and requires a GitHub App token before implementation can start. Please confirm:
+### Confirm before I build
 
-1. OK to use repo commits (`/public/static/**`) as the origin, requiring a `GITHUB_STATIC_TOKEN` secret? Or prefer Vercel deployment API with inline files?
-2. OK to keep a short-lived `/api/fresh/*` edge route to cover the 60s Vercel deploy propagation window? (Alternative: accept up-to-60s staleness on writes.)
-3. OK to flip `STRICT_STATIC_MODE=on` in production at the end of rollout (blocks any public Supabase read)?
+1. OK to create the 5 new tables (`generation_queue`, `static_manifest`, `generation_locks`, `generation_metrics_daily`, `loop_guard`) and add enqueue triggers on `products`, `services`, `insight_articles`, `categories`, `shops`? (Reels use `products` with `is_reel`, so no separate trigger unless you have a dedicated table.)
+2. OK to disable ALL existing cron jobs that call `static-generate` / `static-consistency` / `static-warm` / `static-integrity`, and delete `static-consistency` + `static-warm`?
+3. OK to keep `static-generate` for one deploy as legacy fallback, then remove — or delete immediately in the same migration?
+4. Worker trigger: use `pg_net` from the enqueue trigger (fire-and-forget HTTP to `static-worker`), or keep a single 60s safety cron that only runs when pending rows exist? I recommend `pg_net` + no cron.
