@@ -1,0 +1,396 @@
+// Static content generator: publishes JSON payloads to the dedicated Vercel
+// static-content project via the Vercel Deployment API. The frontend fetches
+// them from the Edge CDN (https://dashboard-eight-khaki-55.vercel.app).
+//
+// Flow per invocation:
+//   1. Build/refresh JSON payloads for the requested entity.
+//   2. Upload each changed payload to Vercel /v2/files (returns a sha1).
+//   3. Upsert the (path, sha, size) into public.static_file_registry.
+//   4. Read the full registry and create a new production deployment
+//      (POST /v13/deployments) whose file list = every row in the registry.
+//      Unchanged files are re-referenced by sha (no re-upload).
+//
+// This keeps Vercel Blob out of the loop entirely — public reads hit the
+// Edge CDN only.
+
+import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const VERCEL_TOKEN = Deno.env.get("VERCEL_TOKEN")!;
+const VERCEL_ORG_ID = Deno.env.get("VERCEL_ORG_ID")!;
+const VERCEL_STATIC_PROJECT_ID = Deno.env.get("VERCEL_STATIC_PROJECT_ID")!;
+const VERCEL_PROJECT_NAME = Deno.env.get("VERCEL_STATIC_PROJECT_NAME") ?? "dashboard";
+
+const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+// --------------- Vercel helpers ---------------
+
+const vercelHeaders = () => ({
+  Authorization: `Bearer ${VERCEL_TOKEN}`,
+  "Content-Type": "application/json",
+});
+const teamQS = VERCEL_ORG_ID ? `?teamId=${VERCEL_ORG_ID}` : "";
+
+async function sha1Hex(bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-1", bytes);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256(s: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Upload one file body to Vercel's file store; returns { sha, size }.
+async function uploadFile(bytes: Uint8Array): Promise<{ sha: string; size: number }> {
+  const sha = await sha1Hex(bytes);
+  const size = bytes.byteLength;
+  const res = await fetch(`https://api.vercel.com/v2/files${teamQS}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${VERCEL_TOKEN}`,
+      "Content-Type": "application/octet-stream",
+      "x-vercel-digest": sha,
+    },
+    body: bytes,
+  });
+  if (!res.ok && res.status !== 200) {
+    const t = await res.text();
+    throw new Error(`vercel upload failed ${res.status}: ${t}`);
+  }
+  return { sha, size };
+}
+
+// Prepare a JSON payload for upload and registry update. Returns the manifest path.
+async function stageJson(path: string, data: unknown, version: number): Promise<string> {
+  const envelope = JSON.stringify({ v: version, generated_at: new Date().toISOString(), data });
+  const bytes = new TextEncoder().encode(envelope);
+  const { sha, size } = await uploadFile(bytes);
+  await admin.from("static_file_registry").upsert({
+    path,
+    sha,
+    size,
+    content_type: "application/json",
+    updated_at: new Date().toISOString(),
+  });
+  return path;
+}
+
+// Remove a path from the registry (so the next deployment omits it).
+async function unstage(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  await admin.from("static_file_registry").delete().in("path", paths);
+}
+
+// Build a full deployment from the current registry.
+async function deploy(reason: string): Promise<{ id: string; url: string }> {
+  const { data: rows, error } = await admin
+    .from("static_file_registry")
+    .select("path,sha,size")
+    .limit(50000);
+  if (error) throw error;
+  const files = (rows ?? []).map((r: any) => ({
+    file: r.path,
+    sha: r.sha,
+    size: r.size,
+  }));
+  const body = {
+    name: VERCEL_PROJECT_NAME,
+    project: VERCEL_STATIC_PROJECT_ID,
+    target: "production",
+    files,
+    projectSettings: { framework: null, outputDirectory: null },
+    meta: { reason },
+  };
+  const res = await fetch(`https://api.vercel.com/v13/deployments${teamQS}&forceNew=1`, {
+    method: "POST",
+    headers: vercelHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`vercel deploy failed ${res.status}: ${t}`);
+  }
+  const j = await res.json();
+  return { id: j.id, url: j.url };
+}
+
+// Manifest is itself a file in the deployment.
+async function stageManifest(paths: string[], removed: string[]): Promise<number> {
+  // Read the existing manifest from CDN so we can carry forward entity versions.
+  const version = Date.now();
+  let entities: Record<string, number> = {};
+  try {
+    const r = await fetch(`https://dashboard-eight-khaki-55.vercel.app/manifest.json`, { cache: "no-store" });
+    if (r.ok) {
+      const prev = await r.json();
+      entities = prev?.entities ?? {};
+    }
+  } catch { /* first run — empty */ }
+  for (const p of paths) entities[p] = version;
+  for (const p of removed) delete entities[p];
+  const manifest = {
+    version,
+    generated_at: new Date().toISOString(),
+    entities,
+    changed: Array.from(new Set([...paths, ...removed.map((p) => `-${p}`)])),
+    hash: await sha256(JSON.stringify(entities)),
+  };
+  await stageJson("manifest.json", manifest, version);
+  // The manifest.json envelope wraps `manifest` under `.data`; the frontend
+  // reads it as raw JSON, so also stage a top-level plain copy.
+  const raw = new TextEncoder().encode(JSON.stringify(manifest));
+  const { sha, size } = await uploadFile(raw);
+  await admin.from("static_file_registry").upsert({
+    path: "manifest.json",
+    sha,
+    size,
+    content_type: "application/json",
+    updated_at: new Date().toISOString(),
+  });
+  return version;
+}
+
+// --------------- Queries ---------------
+
+const PRODUCT_COLS = `
+  id,slug,title,description,price,currency_symbol,images,video_url,video_thumbnail,
+  category,status,views,likes,created_at,updated_at,seller_id,shop_id,
+  minimum_quantity,unlimited_quantity,quantity,contact_call,contact_whatsapp,
+  admin_posted,admin_shop_name,
+  seller:profiles!products_seller_id_fkey(id,full_name,profile_image,whatsapp_number,call_number),
+  shop:shops(id,name,logo_url,slug)
+`;
+
+async function fetchProducts(filter?: (q: any) => any, limit = 100) {
+  let q = admin.from("products").select(PRODUCT_COLS).eq("status", "active");
+  if (filter) q = filter(q);
+  q = q.limit(limit);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+
+// --------------- Generators ---------------
+
+async function genProductLists(): Promise<string[]> {
+  const [latest, featured, popular, trending] = await Promise.all([
+    fetchProducts((q) => q.order("created_at", { ascending: false }), 100),
+    fetchProducts((q) => q.eq("sponsored", true).order("created_at", { ascending: false }), 100),
+    fetchProducts((q) => q.order("likes", { ascending: false, nullsFirst: false }), 100),
+    fetchProducts((q) => q.order("views", { ascending: false, nullsFirst: false }), 100),
+  ]);
+  const v = Date.now();
+  const searchIndex = latest.concat(featured, popular, trending).reduce((acc: any[], p: any) => {
+    if (acc.find((x) => x.id === p.id)) return acc;
+    acc.push({
+      id: p.id, slug: p.slug, title: p.title, price: p.price,
+      category: p.category, image: Array.isArray(p.images) ? p.images[0] : null,
+    });
+    return acc;
+  }, []);
+  const paths = [
+    await stageJson("products/latest.json", latest, v),
+    await stageJson("products/featured.json", featured, v),
+    await stageJson("products/popular.json", popular, v),
+    await stageJson("products/trending.json", trending, v),
+    await stageJson("products/search-index.json", searchIndex, v),
+  ];
+  return paths.map((p) => p.replace(/\.json$/, ""));
+}
+
+async function genProductCategory(category: string): Promise<string[]> {
+  if (!category) return [];
+  const rows = await fetchProducts((q) => q.eq("category", category).order("created_at", { ascending: false }), 200);
+  const path = `products/category/${category}`;
+  await stageJson(`${path}.json`, rows, Date.now());
+  return [path];
+}
+
+async function genProductDetail(slugOrId: string): Promise<string[]> {
+  if (!slugOrId) return [];
+  const { data } = await admin
+    .from("products").select(PRODUCT_COLS)
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
+  if (!data) return [];
+  const path = `product/${data.slug ?? data.id}`;
+  await stageJson(`${path}.json`, data, Date.now());
+  return [path];
+}
+
+async function genServices(): Promise<string[]> {
+  const cols = `*, provider:profiles!services_provider_id_fkey(id,full_name,profile_image)`;
+  const [latest, trending] = await Promise.all([
+    admin.from("services").select(cols).eq("status", "active").order("created_at", { ascending: false }).limit(100),
+    admin.from("services").select(cols).eq("status", "active").order("views", { ascending: false, nullsFirst: false }).limit(100),
+  ]);
+  const v = Date.now();
+  await stageJson("services/latest.json", latest.data ?? [], v);
+  await stageJson("services/featured.json", latest.data ?? [], v);
+  await stageJson("services/trending.json", trending.data ?? [], v);
+  return ["services/latest", "services/featured", "services/trending"];
+}
+
+async function genServiceDetail(slugOrId: string): Promise<string[]> {
+  if (!slugOrId) return [];
+  const { data } = await admin
+    .from("services")
+    .select(`*, provider:profiles!services_provider_id_fkey(id,full_name,profile_image)`)
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
+  if (!data) return [];
+  const path = `service/${data.slug ?? data.id}`;
+  await stageJson(`${path}.json`, data, Date.now());
+  return [path];
+}
+
+async function genReels(): Promise<string[]> {
+  const cols = `
+    id,title,description,price,currency_symbol,video_url,video_thumbnail,images,slug,
+    seller_id,shop_id,contact_call,contact_whatsapp,minimum_quantity,unlimited_quantity,
+    quantity,views,likes,admin_posted,admin_shop_name,created_at,
+    seller:profiles!products_seller_id_fkey(id,full_name,profile_image,whatsapp_number,call_number),
+    shop:shops(id,name,logo_url,slug)
+  `;
+  const base = admin.from("products").select(cols).not("video_url", "is", null).neq("video_url", "").eq("status", "active");
+  const [latest, trending] = await Promise.all([
+    base.order("created_at", { ascending: false }).limit(100),
+    base.order("views", { ascending: false, nullsFirst: false }).limit(100),
+  ]);
+  const v = Date.now();
+  await stageJson("reels/latest.json", latest.data ?? [], v);
+  await stageJson("reels/trending.json", trending.data ?? [], v);
+  return ["reels/latest", "reels/trending"];
+}
+
+async function genArticles(): Promise<string[]> {
+  const [latest, trending] = await Promise.all([
+    admin.from("insight_articles").select("*").eq("status", "published").order("published_at", { ascending: false }).limit(100),
+    admin.from("insight_articles").select("*").eq("status", "published").order("views", { ascending: false, nullsFirst: false }).limit(100),
+  ]);
+  const v = Date.now();
+  await stageJson("articles/latest.json", latest.data ?? [], v);
+  await stageJson("articles/trending.json", trending.data ?? [], v);
+  return ["articles/latest", "articles/trending"];
+}
+
+async function genArticleDetail(slug: string): Promise<string[]> {
+  if (!slug) return [];
+  const { data } = await admin.from("insight_articles").select("*").eq("slug", slug).maybeSingle();
+  if (!data) return [];
+  const path = `article/${data.slug}`;
+  await stageJson(`${path}.json`, data, Date.now());
+  return [path];
+}
+
+async function genCategories(): Promise<string[]> {
+  const [all, serviceCats, insightCats] = await Promise.all([
+    admin.from("categories").select("*").order("name"),
+    admin.from("service_categories").select("*").order("name"),
+    admin.from("insight_categories").select("*").order("name"),
+  ]);
+  const v = Date.now();
+  await stageJson("categories/all.json", all.data ?? [], v);
+  await stageJson("categories/menu.json", (all.data ?? []).filter((c: any) => c.show_in_menu ?? true), v);
+  await stageJson("categories/home.json", (all.data ?? []).slice(0, 12), v);
+  await stageJson("categories/services.json", serviceCats.data ?? [], v);
+  await stageJson("categories/insights.json", insightCats.data ?? [], v);
+  return ["categories/all", "categories/menu", "categories/home", "categories/services", "categories/insights"];
+}
+
+// --------------- Router ---------------
+
+async function handle(body: any): Promise<{ paths: string[]; removed: string[]; deployment?: { id: string; url: string } }> {
+  const { entity, slug, id, category, op } = body ?? {};
+  const paths: string[] = [];
+  const removed: string[] = [];
+  const isDelete = String(op ?? "").toUpperCase() === "DELETE";
+
+  if (isDelete && (slug || id)) {
+    const key = slug ?? id;
+    switch (entity) {
+      case "product":
+      case "reel": removed.push(`product/${key}`); break;
+      case "service": removed.push(`service/${key}`); break;
+      case "article": removed.push(`article/${key}`); break;
+    }
+    if (removed.length > 0) await unstage(removed.map((p) => `${p}.json`));
+  }
+
+  switch (entity) {
+    case "product":
+      paths.push(...(await genProductLists()));
+      if (!isDelete && (slug || id)) paths.push(...(await genProductDetail(slug ?? id)));
+      if (category) paths.push(...(await genProductCategory(category)));
+      break;
+    case "service":
+      paths.push(...(await genServices()));
+      if (!isDelete && (slug || id)) paths.push(...(await genServiceDetail(slug ?? id)));
+      break;
+    case "reel":
+      paths.push(...(await genReels()));
+      paths.push(...(await genProductLists()));
+      if (!isDelete && (slug || id)) paths.push(...(await genProductDetail(slug ?? id)));
+      break;
+    case "article":
+      paths.push(...(await genArticles()));
+      if (!isDelete && slug) paths.push(...(await genArticleDetail(slug)));
+      break;
+    case "category":
+      paths.push(...(await genCategories()));
+      if (category) paths.push(...(await genProductCategory(category)));
+      break;
+    case "all":
+      paths.push(
+        ...(await genProductLists()),
+        ...(await genServices()),
+        ...(await genReels()),
+        ...(await genArticles()),
+        ...(await genCategories()),
+      );
+      break;
+    default:
+      throw new Error(`unknown entity: ${entity}`);
+  }
+
+  const version = await stageManifest(paths, removed);
+  const deployment = await deploy(`${entity}${slug || id ? `:${slug ?? id}` : ""}${isDelete ? "(del)" : ""}`);
+
+  await admin.from("static_gen_log").insert({
+    entity,
+    slug: slug ?? id ?? null,
+    category: category ?? null,
+    paths: [...paths, ...removed.map((p) => `-${p}`)],
+    version,
+    ok: true,
+  });
+  return { paths, removed, deployment };
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  try {
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const result = await handle(body);
+    return new Response(JSON.stringify({ ok: true, ...result }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e) {
+    const msg = (e as Error).message;
+    try {
+      await admin.from("static_gen_log").insert({ entity: "error", paths: [], ok: false, error: msg });
+    } catch { /* ignore */ }
+    return new Response(JSON.stringify({ ok: false, error: msg }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

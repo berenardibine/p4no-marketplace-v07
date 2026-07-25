@@ -1,0 +1,93 @@
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { PRODUCT_CARD_FIELDS, SERVICE_CARD_FIELDS, ARTICLE_CARD_FIELDS } from '@/lib/queryFields';
+import { getCachedList } from '@/lib/productCache';
+import { REDIS_ONLY } from '@/lib/cacheFlags';
+
+
+export type PopularItemType = 'product' | 'service' | 'reel' | 'article';
+
+function currentWeekStartISO() {
+  const d = new Date();
+  const day = d.getUTCDay(); // 0=Sun
+  // ISO week starts Monday (Postgres date_trunc('week') starts Mon)
+  const diff = (day + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
+export const usePopularThisWeek = (itemType: PopularItemType, limit = 12) => {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+
+      // Fast path: serve products popular list from Redis cache.
+      if (itemType === 'product') {
+        const cached = await getCachedList('popular');
+        if (Array.isArray(cached) && cached.length > 0 && active) {
+          setItems(cached.slice(0, limit));
+          setLoading(false);
+          return;
+        }
+        if (REDIS_ONLY) {
+          if (active) { setItems([]); setLoading(false); }
+          return;
+        }
+      }
+
+      if (REDIS_ONLY) {
+        // Non-product popular lists not in Redis yet; refuse DB in strict mode.
+        if (active) { setItems([]); setLoading(false); }
+        return;
+      }
+
+      const week = currentWeekStartISO();
+      const { data: ranked } = await supabase
+
+        .from('weekly_views')
+        .select('item_id, view_count')
+        .eq('item_type', itemType)
+        .eq('week_start', week)
+        .order('view_count', { ascending: false })
+        .limit(limit);
+
+      const ids = (ranked || []).map((r: any) => r.item_id);
+      if (ids.length === 0) {
+        if (active) { setItems([]); setLoading(false); }
+        return;
+      }
+
+      const table = itemType === 'product' ? 'products'
+        : itemType === 'service' ? 'services'
+        : itemType === 'reel' ? 'reels'
+        : 'insight_articles';
+
+      const fields = itemType === 'product' ? PRODUCT_CARD_FIELDS
+        : itemType === 'service' ? SERVICE_CARD_FIELDS
+        : itemType === 'reel' ? 'id, title, thumbnail_url, video_url, views, likes, seller_id, created_at'
+        : ARTICLE_CARD_FIELDS;
+
+      const { data: rows } = await (supabase.from(table as any) as any).select(fields).in('id', ids);
+      const map = new Map(((rows as any[]) || []).map((r: any) => [r.id, r]));
+      const ordered = ids.map((id) => map.get(id)).filter(Boolean);
+      if (active) { setItems(ordered as any[]); setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [itemType, limit]);
+
+  return { items, loading };
+};
+
+// Fire-and-forget weekly view bump
+export const trackWeeklyView = async (itemType: PopularItemType, itemId: string) => {
+  try {
+    await supabase.rpc('increment_weekly_view' as any, { p_item_type: itemType, p_item_id: itemId });
+  } catch (e) {
+    // silent
+  }
+};

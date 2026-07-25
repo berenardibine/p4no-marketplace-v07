@@ -1,0 +1,1 @@
+ALTER TABLE public.reward_tasks ADD COLUMN IF NOT EXISTS text_hint text DEFAULT NULL;

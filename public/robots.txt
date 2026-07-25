@@ -1,0 +1,57 @@
+User-agent: *
+Allow: /
+
+# Block private, auth, and admin areas
+Disallow: /admin
+Disallow: /admin/
+Disallow: /auth
+Disallow: /auth/
+Disallow: /onboarding/
+Disallow: /complete-profile
+Disallow: /complete-profile/
+Disallow: /verify-email
+Disallow: /verify-identity
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /checkout
+Disallow: /seller-dashboard
+Disallow: /saved
+Disallow: /following
+Disallow: /menu
+Disallow: /r/
+
+# Prevent duplicate indexing of alias product paths (canonical lives at /products/:slug)
+Disallow: /p/
+Disallow: /product/
+
+# Strip tracking query strings, but keep search canonicalized via /search/:q
+Disallow: /*?ref=*
+Disallow: /*?utm_*
+Disallow: /*?fbclid=*
+
+# Allow indexable feeds and search pages
+Allow: /reels/
+Allow: /search/
+Allow: /connect/provider/slug/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /auth/
+Disallow: /checkout
+Disallow: /seller-dashboard
+Disallow: /p/
+Disallow: /product/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /auth/
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+Sitemap: https://p4no-marketplace.vercel.app/sitemap.xml
