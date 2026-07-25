@@ -1,79 +1,151 @@
-# Static Generation Engine V2 — Zero-Loop Architecture
+# P4NO Ultra Static Architecture V3
 
-Replaces the current polling/registry-driven generator with a strictly event-driven pipeline. Nothing regenerates on a timer; only real business-data changes (products, services, articles, reels, categories, shops) enqueue work. A single locked worker drains the queue in batches, does dirty-checking, writes only changed files, bumps one manifest version, and invalidates only affected CDN paths.
+Builds on the V2 zero-loop engine (queue + worker + manifest + locks) already in place. V3 completes the picture: every public read is served from Static JSON → CDN → IndexedDB, and PostgREST becomes a write-only surface for public content.
 
-## 1. New database objects
+## 1. Static asset catalog
 
-- `generation_queue` — id, entity_type, entity_id, action (insert/update/delete), priority, status (pending/running/done/error/skipped), created_at, started_at, completed_at, retries, error, dedupe_key (unique on `entity_type|entity_id|action` while status='pending').
-- `static_manifest` — path PK, version bigint, hash text, size int, generated_at. Replaces heavy writes to `static_file_registry`.
-- `generation_locks` — name PK, holder, acquired_at, expires_at. Distributed lock via `INSERT ... ON CONFLICT DO NOTHING` + TTL.
-- `generation_metrics_daily` — date PK, files_generated, files_skipped, db_reads, bytes_written, bytes_saved, errors, loops_detected. One row/day; replaces per-file logging in `static_gen_log`.
-- `loop_guard` — entity_type, entity_id, minute_bucket, count. UPSERT counter; trigger raises alert at >2/min.
+Extend `static-worker` / `static-generate` to emit and version these JSON files:
 
-Triggers on business tables ONLY (`products`, `services`, `insight_articles`, `reels`/product-reels, `categories`, `shops`): AFTER INSERT/UPDATE/DELETE → insert one `generation_queue` row, deduped on pending key. No triggers on registry, manifest, logs, or metrics.
+```text
+/static/manifest.json
+/static/homepage.json
+/static/feeds/popular.json
+/static/feeds/latest.json
+/static/feeds/trending.json
+/static/feeds/featured.json
+/static/search/search-index.json
 
-## 2. Edge functions
+/static/products/{id}.json
+/static/services/{id}.json
+/static/articles/{slug}.json
+/static/reels/{id}.json
+/static/sellers/{id}.json
+/static/shops/{id}.json
 
-- `static-enqueue` — internal helper; called by trigger via `pg_net` for out-of-tx enqueues where needed.
-- `static-worker` (replaces continuous behavior of `static-generate`):
-  1. Acquire lock `worker:main` (skip if held & not expired).
-  2. Sleep-collect window: pull all `pending` rows created in last 15–30s (batch coalesce).
-  3. Resolve dependency map per entity type (product → `product/{id}`, `products/latest`, `products/popular`, matching `products/category/{slug}`, `homepage`, `search-index`).
-  4. For each target path: read only the changed entity rows from DB, compute content hash, compare to `static_manifest.hash`; skip if identical (increment `files_skipped`).
-  5. Write changed files with new global `manifest_version = now_ms`, update `static_manifest` rows, write single manifest.json.
-  6. Invalidate only the changed CDN paths (Vercel `revalidateTag` / path purge).
-  7. Mark queue rows `done`; on error → `error` + retries++ (max 3, exponential backoff).
-  8. Release lock. Update `generation_metrics_daily` (one UPSERT).
-- `static-full-rebuild` — admin-only, manual, requires admin role; ignores dirty-check.
-- Delete: `static-cleanup` reduced to removing files whose manifest entry was deleted this run.
+/static/categories/{slug}.json
+/static/categories/{slug}/page-{n}.json
+```
 
-Worker invocation: `pg_net` from the enqueue trigger fires a single fire-and-forget request; function short-circuits if lock held. No cron. Optional 60s safety cron limited to "process queue if any pending > 60s old" — off by default.
+Every payload uses the envelope already used by `getContent`:
+`{ v, generated_at, hash, size, data }`. Manifest entries store
+`{ version, hash, size, generated_at }` per path plus a top-level
+`manifest_version`.
 
-## 3. Removals / replacements
+## 2. Dependency graph (server-side)
 
-- Delete cron jobs that call `static-generate`, `static-consistency`, `static-warm`, `static-integrity` on schedule.
-- `static_file_registry` writes → removed; table kept read-only for migration; new writes go to `static_manifest`.
-- `static_gen_log` per-file inserts → removed; only errors/warnings + one batch summary row.
-- Any code path that regenerates on registry/log/manifest updates → deleted. Enforced by DB rule: triggers only exist on business tables.
+New file `supabase/functions/_shared/depGraph.ts` exports pure
+`resolveTargets(entity, id?)` used by `static-worker`. Rules:
 
-## 4. Client changes
+- product → product/{id}, homepage, feeds/latest, feeds/popular, categories/{slug}, categories/{slug}/page-*, search-index
+- service → service/{id}, homepage, categories/services/{slug}, search-index
+- article → article/{slug}, insights homepage, homepage, search-index
+- reel → reel/{id}, reels feed, homepage
+- category → category/{slug} + paginated pages, homepage
+- shop / seller → shop/{id}, seller/{id}, homepage (only if featured)
 
-- `staticCDN.ts`: unchanged read path (manifest → IDB → CDN). Add: when manifest version bumps, only refetch entities whose per-path version in manifest changed (already partially implemented; harden pruning).
-- `idbCache.ts`: extend prune to also drop entries whose `hash` differs from manifest.
-- Service worker: immutable cache for versioned `/static/*.json?v=`, network-first for `manifest.json`. No polling.
+Worker expands queue rows through this graph, dedupes, then generates
+only the resulting paths.
 
-## 5. Admin monitor
+## 3. Incremental generator
 
-`AdminCacheMonitor` additions: queue depth, running job, avg gen time, files generated/skipped today, DB reads, bytes written/saved, loop detections, duplicate enqueues prevented, last error. All from `generation_metrics_daily` + `generation_queue` counts (2 cheap queries).
+Enhance `static-generate` (already present) to:
 
-## 6. Safety
+- Accept a `paths[]` mode from `static-worker` (no full scans).
+- Compute `sha256(JSON.stringify(data))` and skip write when hash matches
+  the current `static_manifest` row (dirty check).
+- On write: upload to Vercel Blob, upsert `static_manifest`, bump global
+  `manifest_version` once per worker run.
+- On delete: remove blob, delete manifest row, purge CDN, emit tombstone
+  so clients can drop IndexedDB entry.
 
-- Lock TTL 120s; stale lock auto-expires.
-- Loop guard trigger: if same (entity_type, entity_id) enqueued >2 times in a rolling minute → mark critical, skip generation, log to `generation_metrics_daily.loops_detected`, notify admin.
-- Traffic Guard on worker: if `status='running'` row exists → return 409 "Generation already active".
-- Unique partial index guarantees one pending row per (entity, action).
+## 4. Delete pipeline
 
-## 7. Rollout
+- DB trigger on business tables already enqueues deletes.
+- Worker handles `op = 'delete'` by calling generator delete path,
+  which removes blob + manifest row and appends the path to
+  `manifest.tombstones[]` for the next manifest publish.
+- Client `cdnGuard` reads tombstones on manifest refresh and calls
+  `idbDelete(path)` for each.
 
-1. Migration: create new tables, triggers, lock, metrics, loop guard. GRANTs + RLS.
-2. Ship `static-worker` + `static-full-rebuild`; keep old `static-generate` in place but behind flag `LEGACY_GEN=off`.
-3. Cut triggers over to enqueue-only. Disable all schedule crons for generation.
-4. Observe 24h: queue drains, no loops, `db_reads` low.
-5. Delete legacy functions and registry writes.
+## 5. Client read layer (strict static)
 
-## Success gates
+- Flip `isStrictStaticMode()` on for all public routes.
+- Refactor these hooks to use `getContent()` exclusively (no Supabase
+  fallback fn passed in):
+  `useProducts`, `useProductBySlug`, `useServices`, `useServiceBySlug`,
+  `useReels`, `useUnifiedReels`, `useInsights`, `useCategories`,
+  `usePopularThisWeek`, `useDynamicHomeFeed`, `useHomeSections`,
+  `useShops`, `useShop`, `useAllProducts`, `useFilteredProducts`,
+  `useNearbyProducts`, search page.
+- Search page (`SearchPage.tsx`) switches to in-memory filter over
+  `search/search-index.json` (small denormalised records).
+- `cdnGuard.getContent` already refuses Supabase fallback in strict
+  mode — keep that as the single choke point.
 
-- Zero scheduled generation invocations in 24h.
-- `loops_detected = 0`.
-- `files_skipped / (files_skipped + files_generated) > 0.7` on steady state.
-- PostgREST public reads ≈ 0 (already gated by strict static mode).
-- Deleted entity gone from CDN within one worker cycle (<60s).
+Write flows (auth, orders, likes, comments, admin) keep using PostgREST
+untouched.
 
----
+## 6. Traffic guard
 
-### Confirm before I build
+Add `src/lib/publicReadGuard.ts` that wraps the Supabase client's
+`.from()` for a denylist of public tables (products, services,
+insight_articles, reels, categories, shops, profiles-as-seller):
 
-1. OK to create the 5 new tables (`generation_queue`, `static_manifest`, `generation_locks`, `generation_metrics_daily`, `loop_guard`) and add enqueue triggers on `products`, `services`, `insight_articles`, `categories`, `shops`? (Reels use `products` with `is_reel`, so no separate trigger unless you have a dedicated table.)
-2. OK to disable ALL existing cron jobs that call `static-generate` / `static-consistency` / `static-warm` / `static-integrity`, and delete `static-consistency` + `static-warm`?
-3. OK to keep `static-generate` for one deploy as legacy fallback, then remove — or delete immediately in the same migration?
-4. Worker trigger: use `pg_net` from the enqueue trigger (fire-and-forget HTTP to `static-worker`), or keep a single 60s safety cron that only runs when pending rows exist? I recommend `pg_net` + no cron.
+- In dev / strict mode: throw with a clear message + stack, so any
+  regression is caught immediately.
+- In prod: `console.warn`, increment `cdn_metrics` violation, return
+  empty result.
+- Hooks listed in §5 are migrated first so the guard never fires in
+  normal flows.
+
+## 7. Manifest sync & IndexedDB
+
+`staticCDN.getManifest` already prunes stale keys. Extend to:
+
+- Process `tombstones[]` → `idbDelete`.
+- Fire a `manifest-updated` event; hooks re-read only the paths whose
+  version changed.
+
+No polling — refresh on focus + on 30s idle interval already present.
+
+## 8. Admin dashboard — "Static Architecture" tab
+
+New route `src/pages/admin/AdminStaticArchitecture.tsx` under existing
+admin shell. Sections:
+
+- Traffic mix (browser / CDN / blob / supabase) from `cdn_metrics`.
+- Blocked PostgREST attempts (violations) + top offending paths.
+- Static coverage % = manifest paths / expected paths.
+- Generation metrics from `generation_metrics_daily` +
+  `generation_queue` size, avg gen time, avg file size.
+- Manifest version, last publish time, tombstone count.
+- Top requested + top missing static paths (from `cdn_metrics`).
+- Loop detector state (`loop_guard`).
+- Egress saved estimate = (browser+cdn+blob hits) × avg row bytes.
+
+Read-only — all data comes from tables already populated by V2.
+
+## 9. Removals / hardening
+
+- Remove any remaining `setInterval` polling of PostgREST in hooks
+  touched in §5.
+- Ensure no cron re-enables full rebuilds; `static-full-rebuild`
+  stays admin-triggered only.
+- Worker keeps its single-lock + loop-guard from V2.
+
+## Technical notes
+
+- No new DB tables required — reuse `static_manifest`,
+  `generation_queue`, `generation_metrics_daily`, `cdn_metrics`,
+  `loop_guard`, `generation_locks`.
+- Manifest schema gains `manifest_version:int` and
+  `tombstones: string[]` (client-side additive, no migration).
+- Hash algorithm: SHA-256 hex, stored in `static_manifest.hash`.
+- Search index kept < 500 KB gzipped by trimming to
+  `{id, slug, title, category, price, thumb, tags}`.
+- Category pagination page size = 40.
+- Rollout order: (a) generator + dependency graph, (b) worker path
+  expansion, (c) client hook migration behind strict flag, (d) admin
+  dashboard, (e) enable traffic guard in prod.
+
+Ready to implement on approval.
