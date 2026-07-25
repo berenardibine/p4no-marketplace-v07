@@ -70,11 +70,45 @@ async function uploadFile(bytes: Uint8Array): Promise<{ sha: string; size: numbe
   return { sha, size };
 }
 
+// Track skip stats across a single invocation so the worker can report them.
+const runStats = { written: 0, skipped: 0, bytesWritten: 0, bytesSaved: 0 };
+
 // Prepare a JSON payload for upload and registry update. Returns the manifest path.
+// V3 dirty-check: compute a stable sha256 of the DATA (not the envelope, whose
+// timestamp changes every call). If the hash matches the last recorded value in
+// static_manifest we skip the upload + registry write entirely — this is the
+// core of "no unnecessary writes".
 async function stageJson(path: string, data: unknown, version: number): Promise<string> {
-  const envelope = JSON.stringify({ v: version, generated_at: new Date().toISOString(), data });
+  const dataJson = JSON.stringify(data);
+  const contentHash = await sha256(dataJson);
+
+  const manifestKey = path.replace(/\.json$/, "");
+  const { data: prev } = await admin
+    .from("static_manifest")
+    .select("hash,size")
+    .eq("path", manifestKey)
+    .maybeSingle();
+
+  if (prev?.hash === contentHash) {
+    runStats.skipped += 1;
+    runStats.bytesSaved += prev.size ?? dataJson.length;
+    // Bump generated_at so consumers know we saw it, but do NOT re-upload.
+    await admin
+      .from("static_manifest")
+      .update({ generated_at: new Date().toISOString() })
+      .eq("path", manifestKey);
+    return path;
+  }
+
+  const envelope = JSON.stringify({
+    v: version,
+    generated_at: new Date().toISOString(),
+    hash: contentHash,
+    data,
+  });
   const bytes = new TextEncoder().encode(envelope);
   const { sha, size } = await uploadFile(bytes);
+
   await admin.from("static_file_registry").upsert({
     path,
     sha,
@@ -82,13 +116,27 @@ async function stageJson(path: string, data: unknown, version: number): Promise<
     content_type: "application/json",
     updated_at: new Date().toISOString(),
   });
+
+  await admin.from("static_manifest").upsert({
+    path: manifestKey,
+    version,
+    hash: contentHash,
+    size,
+    generated_at: new Date().toISOString(),
+  });
+
+  runStats.written += 1;
+  runStats.bytesWritten += size;
   return path;
 }
 
-// Remove a path from the registry (so the next deployment omits it).
+// Remove a path from the registry (so the next deployment omits it) and
+// drop its manifest row so clients can prune IndexedDB.
 async function unstage(paths: string[]): Promise<void> {
   if (paths.length === 0) return;
   await admin.from("static_file_registry").delete().in("path", paths);
+  const manifestKeys = paths.map((p) => p.replace(/\.json$/, ""));
+  await admin.from("static_manifest").delete().in("path", manifestKeys);
 }
 
 // Build a full deployment from the current registry.
@@ -142,6 +190,9 @@ async function stageManifest(paths: string[], removed: string[]): Promise<number
     version,
     generated_at: new Date().toISOString(),
     entities,
+    // V3: explicit tombstone list — clients read this on manifest refresh and
+    // delete matching entries from IndexedDB. No stale content survives.
+    tombstones: removed.map((p) => p.replace(/\.json$/, "")),
     changed: Array.from(new Set([...paths, ...removed.map((p) => `-${p}`)])),
     hash: await sha256(JSON.stringify(entities)),
   };
@@ -372,7 +423,7 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
     version,
     ok: true,
   });
-  return { paths, removed, deployment };
+  return { paths, removed, deployment, stats: { ...runStats } };
 }
 
 Deno.serve(async (req) => {
