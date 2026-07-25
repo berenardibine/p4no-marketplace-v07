@@ -96,6 +96,7 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminSeoPages from "./pages/admin/AdminSeoPages";
 import AdminVerifications from "./pages/admin/AdminVerifications";
 import AdminCacheMonitor from "./pages/admin/AdminCacheMonitor";
+import AdminStaticArchitecture from "./pages/admin/AdminStaticArchitecture";
 
 import AdminEmailCenter from "./pages/admin/AdminEmailCenter";
 import AdminBoosts from "./pages/admin/AdminBoosts";
@@ -239,6 +240,7 @@ const App = () => {
                 <Route path="/admin/seo" element={<AdminSeoPages />} />
                 <Route path="/admin/verifications" element={<AdminVerifications />} />
                 <Route path="/admin/cache" element={<AdminCacheMonitor />} />
+                <Route path="/admin/static-architecture" element={<AdminStaticArchitecture />} />
 
                 <Route path="/admin/email-center" element={<AdminEmailCenter />} />
                 <Route path="/admin/boosts" element={<AdminBoosts />} />

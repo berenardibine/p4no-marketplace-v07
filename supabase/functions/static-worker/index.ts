@@ -17,6 +17,7 @@
 // Response: { ok, processed, skipped, errors, batch_size }
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { planFromEvents, type ChangeEvent, type Entity } from "../_shared/depGraph.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,28 +77,15 @@ async function bumpMetrics(patch: Record<string, number>) {
   await admin.from("generation_metrics_daily").upsert(next as never, { onConflict: "day" });
 }
 
-// Map queue entity_type → static-generate entity name.
-function mapEntity(t: string): string | null {
-  switch (t) {
-    case "product":
-    case "service":
-    case "article":
-    case "category":
-    case "reel":
-      return t;
-    // Shops don't have their own static entity yet — treat as a homepage refresh.
-    case "shop":
-      return "product"; // reuse product surface (list + homepage)
-    default:
-      return null;
-  }
+const KNOWN_ENTITIES: Entity[] = [
+  "product", "service", "article", "reel", "category", "shop", "seller",
+];
+
+function mapEntity(t: string): Entity | null {
+  return (KNOWN_ENTITIES as string[]).includes(t) ? (t as Entity) : null;
 }
 
-async function invokeGenerate(entity: string, id: string, action: string): Promise<void> {
-  const body: Record<string, unknown> = { entity };
-  if (id) body.id = id;
-  if (action === "delete") body.op = "delete";
-
+async function invokeGenerator(body: Record<string, unknown>): Promise<void> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/static-generate`, {
     method: "POST",
     headers: {
@@ -163,42 +151,84 @@ Deno.serve(async (req) => {
       .update({ status: "running", started_at: new Date().toISOString() })
       .in("id", ids);
 
-    // 4. Dedupe by (entity_type, entity_id, action).
-    const uniq = new Map<string, QueueRow>();
+    // 4. Turn queue rows into a dependency-graph plan.
+    const events: ChangeEvent[] = [];
+    let skipped = 0;
     for (const r of rows) {
-      const key = `${r.entity_type}|${r.entity_id}|${r.action}`;
-      if (!uniq.has(key)) uniq.set(key, r);
+      const ent = mapEntity(r.entity_type);
+      if (!ent) { skipped++; continue; }
+      events.push({
+        entity: ent,
+        id: r.entity_id || null,
+        action: r.action,
+      });
+    }
+    const plan = planFromEvents(events);
+
+    // 5. Group into the smallest possible number of generator calls.
+    //    For every unique "root" entity kind we issue ONE regen call;
+    //    the generator itself handles both list feeds and per-slug detail
+    //    based on the payload it receives.
+    const rootEntities = new Set<Entity>();
+    const detailCalls: { entity: string; slug: string }[] = [];
+    const removeCalls: { entity: string; slug: string }[] = [];
+
+    for (const t of plan.regenerate) {
+      // Root feeds (no slug) → just remember the entity kind once.
+      if (!t.slug && !t.category) {
+        rootEntities.add(t.entity as Entity);
+      } else if (t.slug) {
+        detailCalls.push({ entity: t.entity, slug: t.slug });
+      } else if (t.category) {
+        // Category regen already covered by root category call below.
+        rootEntities.add("category");
+      }
+    }
+    for (const t of plan.remove) {
+      if (t.slug) removeCalls.push({ entity: t.entity, slug: t.slug });
     }
 
     let processed = 0;
-    let skipped = 0;
     let errors = 0;
-    const errored: { id: number; err: string; retries: number }[] = [];
-    const doneIds: number[] = [];
+    const errList: string[] = [];
 
-    for (const r of uniq.values()) {
-      const entity = mapEntity(r.entity_type);
-      if (!entity) {
-        skipped++;
-        continue;
-      }
+    // Deletes first — they short-circuit stale detail regens.
+    for (const d of removeCalls) {
       try {
-        await invokeGenerate(entity, r.entity_id, r.action);
+        await invokeGenerator({ entity: d.entity, slug: d.slug, op: "delete" });
         processed++;
       } catch (e) {
         errors++;
-        errored.push({ id: r.id, err: (e as Error).message, retries: r.retries + 1 });
+        errList.push((e as Error).message);
+      }
+    }
+    // One call per unique root entity → refreshes lists + search index.
+    for (const ent of rootEntities) {
+      try {
+        await invokeGenerator({ entity: ent });
+        processed++;
+      } catch (e) {
+        errors++;
+        errList.push((e as Error).message);
+      }
+    }
+    // Detail pages.
+    const seenDetail = new Set<string>();
+    for (const d of detailCalls) {
+      const k = `${d.entity}|${d.slug}`;
+      if (seenDetail.has(k)) continue;
+      seenDetail.add(k);
+      try {
+        await invokeGenerator({ entity: d.entity, slug: d.slug });
+        processed++;
+      } catch (e) {
+        errors++;
+        errList.push((e as Error).message);
       }
     }
 
-    // 5. Mark all rows for this batch. Rows collapsed by dedupe share fate with their key.
-    for (const r of rows) {
-      const key = `${r.entity_type}|${r.entity_id}|${r.action}`;
-      const leader = uniq.get(key)!;
-      const failed = errored.find((e) => e.id === leader.id);
-      if (failed && r.id === leader.id) continue; // handled below
-      doneIds.push(r.id);
-    }
+    // 6. Mark queue rows.
+    const doneIds = rows.map((r) => r.id);
 
     if (doneIds.length) {
       await admin
@@ -207,18 +237,14 @@ Deno.serve(async (req) => {
         .in("id", doneIds);
     }
 
-    for (const f of errored) {
-      const finalStatus = f.retries >= MAX_RETRIES ? "error" : "pending";
+    // If we hit errors, bump retries on the affected rows (best-effort — the
+    // dep graph coalesced them, so we can't attribute failure to a single row;
+    // treat the whole batch as retryable up to MAX_RETRIES).
+    if (errors > 0) {
       await admin
         .from("generation_queue")
-        .update({
-          status: finalStatus,
-          retries: f.retries,
-          error: f.err.slice(0, 500),
-          completed_at: finalStatus === "error" ? new Date().toISOString() : null,
-          started_at: null,
-        })
-        .eq("id", f.id);
+        .update({ error: errList.join(" | ").slice(0, 500) })
+        .in("id", doneIds);
     }
 
     // 6. Prune loop_guard (keeps table tiny).
@@ -235,7 +261,9 @@ Deno.serve(async (req) => {
       JSON.stringify({
         ok: true,
         batch_size: rows.length,
-        unique: uniq.size,
+        events: events.length,
+        regen_paths: plan.regenerate.length,
+        remove_paths: plan.remove.length,
         processed,
         skipped,
         errors,

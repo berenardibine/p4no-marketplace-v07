@@ -6,7 +6,7 @@
 //   { v: <version>, generated_at: iso, data: <T> }
 
 import { STATIC_CDN } from './staticFlags';
-import { idbGet, idbPut, idbBulkPrune, idbKeys } from './idbCache';
+import { idbGet, idbPut, idbDelete, idbBulkPrune, idbKeys } from './idbCache';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Envelope<T> {
@@ -18,6 +18,8 @@ interface Envelope<T> {
 export interface Manifest {
   version: number;
   entities: Record<string, number>;
+  /** V3: paths deleted since the previous manifest — clients evict them. */
+  tombstones?: string[];
 }
 
 let manifestPromise: Promise<Manifest | null> | null = null;
@@ -51,6 +53,20 @@ export async function getManifest(force = false): Promise<Manifest | null> {
           const stale = keys.filter((k) => !valid.has(k));
           if (stale.length > 0) await idbBulkPrune(valid);
         } catch { /* ignore */ }
+        // V3: process explicit tombstones (belt-and-braces on top of the
+        // manifest diff — covers the case where a client fetches the same
+        // manifest version twice but the previous prune failed).
+        if (Array.isArray(m.tombstones) && m.tombstones.length > 0) {
+          try {
+            for (const t of m.tombstones) await idbDelete(t);
+          } catch { /* ignore */ }
+        }
+        // Fire a DOM event so hooks can invalidate their in-memory copies.
+        if (typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(new CustomEvent('p4no:manifest-updated', { detail: m }));
+          } catch { /* ignore */ }
+        }
       }
       return m;
     } catch {
