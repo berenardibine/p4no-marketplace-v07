@@ -6,7 +6,7 @@
 //   { v: <version>, generated_at: iso, data: <T> }
 
 import { STATIC_CDN } from './staticFlags';
-import { idbGet, idbPut, idbBulkPrune, idbKeys } from './idbCache';
+import { idbGet, idbPut, idbDelete, idbBulkPrune, idbKeys } from './idbCache';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Envelope<T> {
