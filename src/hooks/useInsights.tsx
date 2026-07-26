@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { waitForPath } from '@/lib/staticCDN';
 
 
 export interface InsightCategory {
@@ -47,6 +48,12 @@ export const useInsightCategories = () =>
   useQuery({
     queryKey: ['insight-categories'],
     queryFn: async (): Promise<InsightCategory[]> => {
+      const staticCats = await getContent<InsightCategory[]>('categories/insights');
+      if (Array.isArray(staticCats)) {
+        return staticCats.filter((c) => c.is_active !== false)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      }
+      if (isStrictStaticMode()) return [];
       const { data, error } = await (supabase as any)
         .from('insight_categories')
         .select('*')
@@ -113,6 +120,14 @@ export const useInsightArticle = (slug: string | undefined) =>
           .eq('id', (cached as any).id).then(() => {});
         return cached as InsightArticle;
       }
+      // V4: wait for a queued generation before falling back to DB.
+      try {
+        const built = await waitForPath(`article/${slug}`);
+        if (built) {
+          const retry = await getContent<InsightArticle>(`article/${slug}`);
+          if (retry) return retry;
+        }
+      } catch { /* fall through */ }
       if (isStrictStaticMode()) return null;
       const { data, error } = await (supabase as any)
         .from('insight_articles')
@@ -136,6 +151,17 @@ export const useRelatedInsights = (article: InsightArticle | null | undefined) =
     enabled: !!article?.id,
     queryFn: async (): Promise<InsightArticle[]> => {
       if (!article) return [];
+      // Static-first: derive from the latest feed, filter by category, exclude self.
+      const staticRows = await getContent<InsightArticle[]>('articles/latest');
+      if (Array.isArray(staticRows)) {
+        const rel = staticRows
+          .filter((r) => r.id !== article.id)
+          .filter((r) => !article.category_id || r.category_id === article.category_id)
+          .slice(0, 6);
+        if (rel.length > 0 || isStrictStaticMode()) return rel;
+      } else if (isStrictStaticMode()) {
+        return [];
+      }
       let qb = (supabase as any)
         .from('insight_articles')
         .select(ARTICLE_FIELDS)
