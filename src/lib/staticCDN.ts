@@ -81,12 +81,17 @@ function entityFromPath(path: string): { entity: string; slug?: string; category
   if (p.startsWith('product/')) return { entity: 'product', slug: p.slice('product/'.length) };
   if (p.startsWith('service/')) return { entity: 'service', slug: p.slice('service/'.length) };
   if (p.startsWith('article/')) return { entity: 'article', slug: p.slice('article/'.length) };
+  if (p.startsWith('shops/') && p.split('/').length === 2) return { entity: 'shop', slug: p.slice('shops/'.length) };
+  if (p.startsWith('sellers/')) return { entity: 'seller', slug: p.slice('sellers/'.length) };
   if (p.startsWith('products/category/')) return { entity: 'category', category: p.slice('products/category/'.length) };
   if (p.startsWith('products/')) return { entity: 'product' };
   if (p.startsWith('services/')) return { entity: 'service' };
   if (p.startsWith('reels/')) return { entity: 'reel' };
   if (p.startsWith('articles/')) return { entity: 'article' };
   if (p.startsWith('categories/')) return { entity: 'category' };
+  if (p === 'homepage') return { entity: 'homepage' };
+  if (p.startsWith('feeds/')) return { entity: 'feeds' };
+  if (p.startsWith('search/')) return { entity: 'search' };
   return null;
 }
 
@@ -101,6 +106,31 @@ async function selfHeal(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * V4: block briefly while the generator finishes a queued/running job for this path.
+ * Never falls back to PostgREST — either the file appears in the manifest or we surface
+ * a real miss to the caller (who should render a 404).
+ */
+export async function waitForPath(path: string, timeoutMs = 8000): Promise<boolean> {
+  const clean = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  try {
+    const { data } = await supabase.functions.invoke('static-queue-status', {
+      body: { path: clean },
+    });
+    const status = data as { queued?: boolean; running?: boolean } | null;
+    if (!status?.queued && !status?.running) return false;
+  } catch {
+    return false;
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 800));
+    const m = await getManifest(true);
+    if (m?.entities?.[clean]) return true;
+  }
+  return false;
 }
 
 /**

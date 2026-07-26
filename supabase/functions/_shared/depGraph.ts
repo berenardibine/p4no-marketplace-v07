@@ -59,6 +59,12 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
         { path: "products/featured", entity: "product" },
         { path: "products/trending", entity: "product" },
         { path: "products/search-index", entity: "product" },
+        { path: "feeds/latest", entity: "feeds" },
+        { path: "feeds/popular", entity: "feeds" },
+        { path: "feeds/featured", entity: "feeds" },
+        { path: "feeds/trending", entity: "feeds" },
+        { path: "search/search-index", entity: "search" },
+        { path: "homepage", entity: "homepage" },
       );
       if (key) {
         out.push({
@@ -74,6 +80,11 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
           entity: "category",
           category: ev.category,
         });
+        out.push({
+          path: `categories/${ev.category}/index`,
+          entity: "category-page",
+          category: ev.category,
+        });
       }
       break;
     }
@@ -82,6 +93,8 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
         { path: "services/latest", entity: "service" },
         { path: "services/featured", entity: "service" },
         { path: "services/trending", entity: "service" },
+        { path: "search/search-index", entity: "search" },
+        { path: "homepage", entity: "homepage" },
       );
       if (key) {
         out.push({
@@ -97,6 +110,8 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
       out.push(
         { path: "articles/latest", entity: "article" },
         { path: "articles/trending", entity: "article" },
+        { path: "search/search-index", entity: "search" },
+        { path: "homepage", entity: "homepage" },
       );
       if (key) {
         out.push({
@@ -112,6 +127,7 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
       out.push(
         { path: "reels/latest", entity: "reel" },
         { path: "reels/trending", entity: "reel" },
+        { path: "homepage", entity: "homepage" },
       );
       // Reels reuse the product feed lists as well.
       out.push(
@@ -133,6 +149,7 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
         { path: "categories/all", entity: "category" },
         { path: "categories/menu", entity: "category" },
         { path: "categories/home", entity: "category" },
+        { path: "homepage", entity: "homepage" },
       );
       if (ev.category) {
         out.push({
@@ -140,16 +157,29 @@ export function resolveTargets(ev: ChangeEvent): ResolvedTarget[] {
           entity: "category",
           category: ev.category,
         });
+        out.push({
+          path: `categories/${ev.category}/index`,
+          entity: "category-page",
+          category: ev.category,
+        });
       }
       break;
     }
     case "shop":
     case "seller": {
-      // Shops/sellers only affect their product feeds.
       out.push(
         { path: "products/latest", entity: "product" },
         { path: "products/popular", entity: "product" },
+        { path: "homepage", entity: "homepage" },
       );
+      if (key) {
+        out.push({
+          path: `${ev.entity}/${key}`,
+          entity: ev.entity,
+          slug: key,
+          remove: del,
+        });
+      }
       break;
     }
   }
