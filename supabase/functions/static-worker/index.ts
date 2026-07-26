@@ -80,6 +80,8 @@ async function bumpMetrics(patch: Record<string, number>) {
 const KNOWN_ENTITIES: Entity[] = [
   "product", "service", "article", "reel", "category", "shop", "seller",
 ];
+// V4: virtual entities emitted by the dep graph (no queue rows, only fan-out targets).
+const VIRTUAL_ENTITIES = new Set<string>(["homepage", "feeds", "search", "category-page"]);
 
 function mapEntity(t: string): Entity | null {
   return (KNOWN_ENTITIES as string[]).includes(t) ? (t as Entity) : null;
@@ -171,6 +173,7 @@ Deno.serve(async (req) => {
     //    based on the payload it receives.
     const rootEntities = new Set<Entity>();
     const detailCalls: { entity: string; slug: string }[] = [];
+    const categoryCalls: { entity: string; category: string }[] = [];
     const removeCalls: { entity: string; slug: string }[] = [];
 
     for (const t of plan.regenerate) {
@@ -180,8 +183,8 @@ Deno.serve(async (req) => {
       } else if (t.slug) {
         detailCalls.push({ entity: t.entity, slug: t.slug });
       } else if (t.category) {
-        // Category regen already covered by root category call below.
-        rootEntities.add("category");
+        // Explicit category-scoped regen (e.g. category pagination).
+        categoryCalls.push({ entity: t.entity, category: t.category });
       }
     }
     for (const t of plan.remove) {
@@ -206,6 +209,20 @@ Deno.serve(async (req) => {
     for (const ent of rootEntities) {
       try {
         await invokeGenerator({ entity: ent });
+        processed++;
+      } catch (e) {
+        errors++;
+        errList.push((e as Error).message);
+      }
+    }
+    // Category-scoped calls (e.g. category-page pagination).
+    const seenCat = new Set<string>();
+    for (const c of categoryCalls) {
+      const k = `${c.entity}|${c.category}`;
+      if (seenCat.has(k)) continue;
+      seenCat.add(k);
+      try {
+        await invokeGenerator({ entity: c.entity, category: c.category });
         processed++;
       } catch (e) {
         errors++;
