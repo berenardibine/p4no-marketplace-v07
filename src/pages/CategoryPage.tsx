@@ -12,8 +12,11 @@ import PageMetaTags from '@/components/seo/PageMetaTags';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import { useAuth } from '@/hooks/useAuth';
 import { useGeo } from '@/context/GeoContext';
+import { getCachedCategory, getCachedList, getCachedCategories } from '@/lib/productCache';
+import { getContent } from '@/lib/cdnGuard';
+import { waitForPath } from '@/lib/staticCDN';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 import { supabase } from '@/integrations/supabase/client';
-import { getCachedCategory, getCachedList } from '@/lib/productCache';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
@@ -82,32 +85,53 @@ const CategoryPage = () => {
     if (isInitial) setLoading(true); else setLoadingMore(true);
     try {
       let newItems: Product[] = [];
-      // Redis-first: page 0 served from cache (100-item batch)
-      if (pageNum === 0) {
+      // V4 static-first: use paginated category pages (40 per page) written
+      // by the generator; fall back to the 100-item cached bucket for legacy
+      // slugs that don't yet have paginated files.
+      const staticPageIdx = Math.floor((pageNum * PAGE_SIZE) / 40);
+      const staticPage = await getContent<Product[]>(
+        `categories/${slug}/page-${staticPageIdx + 1}`,
+      );
+      if (Array.isArray(staticPage) && staticPage.length > 0) {
+        const localOffset = (pageNum * PAGE_SIZE) - (staticPageIdx * 40);
+        newItems = staticPage.slice(localOffset, localOffset + PAGE_SIZE);
+        const idx = await getContent<{ total: number }>(`categories/${slug}/index`);
+        if (idx?.total) setTotalCount(idx.total);
+      } else if (pageNum === 0) {
         const cached = await getCachedCategory(slug, 0, 100);
-        if (cached) newItems = cached.slice(0, PAGE_SIZE) as Product[];
-      }
-      if (newItems.length === 0) {
-        const from = pageNum * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
-        const prodRes = await supabase
-          .from('products')
-          .select('id, title, price, images, rental_unit, sponsored, admin_posted, is_negotiable, currency_symbol', { count: 'exact' })
-          .eq('status', 'active')
-          .eq('category', slug)
-          .order('created_at', { ascending: false })
-          .range(from, to);
-        newItems = (prodRes.data || []) as Product[];
-        setTotalCount(prodRes.count ?? newItems.length);
+        if (cached) {
+          newItems = cached.slice(0, PAGE_SIZE) as Product[];
+          setTotalCount(cached.length);
+        } else {
+          // Wait for a queued generation before ever asking PostgREST.
+          const built = await waitForPath(`categories/${slug}/page-1`);
+          if (built) {
+            const retry = await getContent<Product[]>(`categories/${slug}/page-1`);
+            if (Array.isArray(retry)) newItems = retry.slice(0, PAGE_SIZE);
+          }
+        }
       }
 
       if (isInitial) {
-        const catRes = await supabase
-          .from('categories')
-          .select('id, name, slug, icon, seo_title, seo_description, seo_image')
-          .eq('slug', slug)
-          .maybeSingle();
-        if (catRes.data) setCategory(catRes.data);
+        const allCats = await getCachedCategories();
+        const match = Array.isArray(allCats)
+          ? (allCats as any[]).find((c) => c.slug === slug)
+          : null;
+        if (match) {
+          setCategory({
+            id: match.id, name: match.name, slug: match.slug, icon: match.icon,
+            seo_title: match.seo_title ?? null,
+            seo_description: match.seo_description ?? null,
+            seo_image: match.seo_image ?? null,
+          });
+        } else if (!isStrictStaticMode()) {
+          const catRes = await supabase
+            .from('categories')
+            .select('id, name, slug, icon, seo_title, seo_description, seo_image')
+            .eq('slug', slug)
+            .maybeSingle();
+          if (catRes.data) setCategory(catRes.data);
+        }
       }
 
       setHasMore(newItems.length === PAGE_SIZE);
@@ -154,16 +178,12 @@ const CategoryPage = () => {
     if (!slug) return;
     setLoadingOther(true);
     try {
+      // Static-first: derive from the cached latest feed, excluding current category.
+      const latest = await getCachedList('latest', 0, 200);
+      const filtered = (Array.isArray(latest) ? latest : [])
+        .filter((p: any) => p.category !== slug) as Product[];
       const from = pageNum * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-      const { data } = await supabase
-        .from('products')
-        .select('id, title, price, images, rental_unit, sponsored, admin_posted, is_negotiable, currency_symbol')
-        .eq('status', 'active')
-        .neq('category', slug)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-      const items = (data || []) as Product[];
+      const items = filtered.slice(from, from + PAGE_SIZE);
       setHasMoreOther(items.length === PAGE_SIZE);
       setOtherProducts(prev => [...prev, ...items]);
       setOtherPage(pageNum + 1);
