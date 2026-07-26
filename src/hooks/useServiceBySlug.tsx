@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Service } from './useServices';
 import { getCachedServiceDetail } from '@/lib/contentCache';
 import { REDIS_ONLY } from '@/lib/cacheFlags';
+import { waitForPath } from '@/lib/staticCDN';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 
 export function useServiceBySlug(slugOrId: string | undefined) {
   const [service, setService] = useState<Service | null>(null);
@@ -25,9 +27,22 @@ export function useServiceBySlug(slugOrId: string | undefined) {
         return;
       }
 
-      if (REDIS_ONLY) {
+      // V4: wait for a queued/running generation before ever touching the DB.
+      try {
+        const built = await waitForPath(`service/${slugOrId}`);
+        if (built) {
+          const retry = await getCachedServiceDetail(slugOrId);
+          if (!cancelled && retry) {
+            setService(retry as Service);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch { /* fall through */ }
+
+      if (REDIS_ONLY || isStrictStaticMode()) {
         if (!cancelled) {
-          setError('Service not in Redis cache (REDIS_ONLY mode)');
+          setError('Service not found');
           setLoading(false);
         }
         return;
