@@ -357,6 +357,109 @@ async function genCategories(): Promise<string[]> {
   return ["categories/all", "categories/menu", "categories/home", "categories/services", "categories/insights"];
 }
 
+// ---------- V4 additions ----------
+
+const PAGE_SIZE = 40;
+
+async function genCategoryPaginated(category: string): Promise<string[]> {
+  if (!category) return [];
+  const rows = await fetchProducts((q) => q.eq("category", category).order("created_at", { ascending: false }), 2000);
+  const v = Date.now();
+  const total = rows.length;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const paths: string[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    const slice = rows.slice(i * PAGE_SIZE, (i + 1) * PAGE_SIZE);
+    const p = `categories/${category}/page-${i + 1}`;
+    await stageJson(`${p}.json`, slice, v);
+    paths.push(p);
+  }
+  const idx = `categories/${category}/index`;
+  await stageJson(`${idx}.json`, { total, pageCount, pageSize: PAGE_SIZE }, v);
+  paths.push(idx);
+  return paths;
+}
+
+async function genFeeds(): Promise<string[]> {
+  const [latest, popular, trending, featured] = await Promise.all([
+    fetchProducts((q) => q.order("created_at", { ascending: false }), 100),
+    fetchProducts((q) => q.order("likes", { ascending: false, nullsFirst: false }), 100),
+    fetchProducts((q) => q.order("views", { ascending: false, nullsFirst: false }), 100),
+    fetchProducts((q) => q.eq("sponsored", true).order("created_at", { ascending: false }), 100),
+  ]);
+  const v = Date.now();
+  await stageJson("feeds/latest.json", latest, v);
+  await stageJson("feeds/popular.json", popular, v);
+  await stageJson("feeds/trending.json", trending, v);
+  await stageJson("feeds/featured.json", featured, v);
+  return ["feeds/latest", "feeds/popular", "feeds/trending", "feeds/featured"];
+}
+
+async function genSearchIndex(): Promise<string[]> {
+  const [prods, svcs, arts] = await Promise.all([
+    admin.from("products").select("id,slug,title,category,price,images").eq("status", "active").limit(2000),
+    admin.from("services").select("id,slug,title,category").eq("status", "active").limit(1000),
+    admin.from("insight_articles").select("id,slug,title,category").eq("status", "published").limit(1000),
+  ]);
+  const index = [
+    ...(prods.data ?? []).map((p: any) => ({
+      kind: "product", id: p.id, slug: p.slug, title: p.title,
+      category: p.category, price: p.price,
+      thumb: Array.isArray(p.images) ? p.images[0] : null,
+    })),
+    ...(svcs.data ?? []).map((s: any) => ({
+      kind: "service", id: s.id, slug: s.slug, title: s.title, category: s.category,
+    })),
+    ...(arts.data ?? []).map((a: any) => ({
+      kind: "article", id: a.id, slug: a.slug, title: a.title, category: a.category,
+    })),
+  ];
+  await stageJson("search/search-index.json", index, Date.now());
+  return ["search/search-index"];
+}
+
+async function genHomepage(): Promise<string[]> {
+  const [latest, popular, featured, cats] = await Promise.all([
+    fetchProducts((q) => q.order("created_at", { ascending: false }), 24),
+    fetchProducts((q) => q.order("likes", { ascending: false, nullsFirst: false }), 24),
+    fetchProducts((q) => q.eq("sponsored", true).order("created_at", { ascending: false }), 12),
+    admin.from("categories").select("*").order("name").limit(24),
+  ]);
+  const bundle = {
+    latest, popular, featured,
+    categories: cats.data ?? [],
+  };
+  await stageJson("homepage.json", bundle, Date.now());
+  return ["homepage"];
+}
+
+async function genShops(): Promise<string[]> {
+  const { data } = await admin.from("shops").select("*").order("created_at", { ascending: false }).limit(500);
+  await stageJson("shops/all.json", data ?? [], Date.now());
+  return ["shops/all"];
+}
+
+async function genShopDetail(slugOrId: string): Promise<string[]> {
+  if (!slugOrId) return [];
+  const { data } = await admin.from("shops").select("*")
+    .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
+  if (!data) return [];
+  const p = `shops/${data.slug ?? data.id}`;
+  await stageJson(`${p}.json`, data, Date.now());
+  return [p];
+}
+
+async function genSellerDetail(id: string): Promise<string[]> {
+  if (!id) return [];
+  const { data } = await admin.from("profiles")
+    .select("id,full_name,profile_image,bio,whatsapp_number,call_number,created_at")
+    .eq("id", id).maybeSingle();
+  if (!data) return [];
+  const p = `sellers/${data.id}`;
+  await stageJson(`${p}.json`, data, Date.now());
+  return [p];
+}
+
 // --------------- Router ---------------
 
 async function handle(body: any): Promise<{ paths: string[]; removed: string[]; deployment?: { id: string; url: string } }> {
@@ -372,6 +475,8 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
       case "reel": removed.push(`product/${key}`); break;
       case "service": removed.push(`service/${key}`); break;
       case "article": removed.push(`article/${key}`); break;
+      case "shop": removed.push(`shops/${key}`); break;
+      case "seller": removed.push(`sellers/${key}`); break;
     }
     if (removed.length > 0) await unstage(removed.map((p) => `${p}.json`));
   }
@@ -379,25 +484,61 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
   switch (entity) {
     case "product":
       paths.push(...(await genProductLists()));
+      paths.push(...(await genFeeds()));
+      paths.push(...(await genSearchIndex()));
+      paths.push(...(await genHomepage()));
       if (!isDelete && (slug || id)) paths.push(...(await genProductDetail(slug ?? id)));
-      if (category) paths.push(...(await genProductCategory(category)));
+      if (category) {
+        paths.push(...(await genProductCategory(category)));
+        paths.push(...(await genCategoryPaginated(category)));
+      }
       break;
     case "service":
       paths.push(...(await genServices()));
+      paths.push(...(await genSearchIndex()));
+      paths.push(...(await genHomepage()));
       if (!isDelete && (slug || id)) paths.push(...(await genServiceDetail(slug ?? id)));
       break;
     case "reel":
       paths.push(...(await genReels()));
       paths.push(...(await genProductLists()));
+      paths.push(...(await genHomepage()));
       if (!isDelete && (slug || id)) paths.push(...(await genProductDetail(slug ?? id)));
       break;
     case "article":
       paths.push(...(await genArticles()));
+      paths.push(...(await genSearchIndex()));
+      paths.push(...(await genHomepage()));
       if (!isDelete && slug) paths.push(...(await genArticleDetail(slug)));
       break;
     case "category":
       paths.push(...(await genCategories()));
-      if (category) paths.push(...(await genProductCategory(category)));
+      paths.push(...(await genHomepage()));
+      if (category) {
+        paths.push(...(await genProductCategory(category)));
+        paths.push(...(await genCategoryPaginated(category)));
+      }
+      break;
+    case "category-page":
+      if (category) paths.push(...(await genCategoryPaginated(category)));
+      break;
+    case "shop":
+      paths.push(...(await genShops()));
+      paths.push(...(await genHomepage()));
+      if (!isDelete && (slug || id)) paths.push(...(await genShopDetail(slug ?? id)));
+      break;
+    case "seller":
+      paths.push(...(await genHomepage()));
+      if (!isDelete && (slug || id)) paths.push(...(await genSellerDetail(slug ?? id)));
+      break;
+    case "homepage":
+      paths.push(...(await genHomepage()));
+      break;
+    case "feeds":
+      paths.push(...(await genFeeds()));
+      break;
+    case "search":
+      paths.push(...(await genSearchIndex()));
       break;
     case "all":
       paths.push(
@@ -406,6 +547,10 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
         ...(await genReels()),
         ...(await genArticles()),
         ...(await genCategories()),
+        ...(await genFeeds()),
+        ...(await genSearchIndex()),
+        ...(await genHomepage()),
+        ...(await genShops()),
       );
       break;
     default:
