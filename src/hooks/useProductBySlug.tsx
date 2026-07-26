@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Product } from './useProducts';
 import { getCachedProductDetail } from '@/lib/productCache';
 import { REDIS_ONLY } from '@/lib/cacheFlags';
+import { waitForPath } from '@/lib/staticCDN';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 
 
 export const useProductBySlug = (slugOrId: string | undefined) => {
@@ -46,8 +48,23 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
         /* network failure → DB fallback below */
       }
 
-      if (REDIS_ONLY) {
-        setError('Product not in Redis cache (REDIS_ONLY mode)');
+      // V4: before ever considering the DB, ask the generator queue whether
+      // this path is being built right now. If so, wait for the manifest bump
+      // and retry the static read — no PostgREST touch.
+      try {
+        const built = await waitForPath(`product/${slugOrId}`);
+        if (built) {
+          const retry = await getCachedProductDetail(slugOrId);
+          if (retry) {
+            setProduct(retry as unknown as Product);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch { /* fall through */ }
+
+      if (REDIS_ONLY || isStrictStaticMode()) {
+        setError('Product not found');
         setProduct(null);
         setLoading(false);
         return;
