@@ -17,18 +17,39 @@ export const useNotifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [listLoaded, setListLoaded] = useState(false);
 
   useEffect(() => {
     if (user) {
-      fetchNotifications();
+      // Badge-only path: cheap COUNT with head:true — no row egress until the
+      // panel is opened via loadList(). Realtime keeps the count in sync.
+      fetchUnreadCount();
       const cleanup = subscribeToNotifications();
       return cleanup;
     } else {
       setNotifications([]);
       setUnreadCount(0);
+      setListLoaded(false);
       setLoading(false);
     }
   }, [user]);
+
+  const fetchUnreadCount = async () => {
+    if (!user) return;
+    try {
+      setLoading(true);
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .or(`user_id.eq.${user.id},user_id.is.null`)
+        .eq('is_read', false);
+      setUnreadCount(count ?? 0);
+    } catch (err) {
+      console.error('Error fetching notification count:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchNotifications = async () => {
     if (!user) return;
@@ -47,11 +68,18 @@ export const useNotifications = () => {
       const notifList = data as Notification[] || [];
       setNotifications(notifList);
       setUnreadCount(notifList.filter(n => !n.is_read).length);
+      setListLoaded(true);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Call when the notifications panel/page opens to load the full list. */
+  const loadList = async () => {
+    if (listLoaded) return;
+    await fetchNotifications();
   };
 
   const subscribeToNotifications = () => {
@@ -139,6 +167,7 @@ export const useNotifications = () => {
     loading, 
     markAsRead, 
     markAllAsRead, 
-    refetch: fetchNotifications 
+    refetch: fetchNotifications,
+    loadList,
   };
 };
