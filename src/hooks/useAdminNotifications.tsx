@@ -71,12 +71,6 @@ export const useAdminNotifications = () => {
     fetchCounts();
     fetchRecent();
 
-    // Poll every 60 seconds
-    const interval = setInterval(() => {
-      fetchCounts();
-      fetchRecent();
-    }, 60000);
-
     // Realtime subscription
     const channel = supabase
       .channel(`admin-notifications-badges-${Math.random().toString(36).slice(2, 10)}`)
@@ -98,7 +92,6 @@ export const useAdminNotifications = () => {
       .subscribe();
 
     return () => {
-      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [isAdmin, fetchCounts, fetchRecent]);

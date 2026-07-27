@@ -97,6 +97,7 @@ import AdminSeoPages from "./pages/admin/AdminSeoPages";
 import AdminVerifications from "./pages/admin/AdminVerifications";
 import AdminCacheMonitor from "./pages/admin/AdminCacheMonitor";
 import AdminStaticArchitecture from "./pages/admin/AdminStaticArchitecture";
+import AdminPerformanceCenter from "./pages/admin/AdminPerformanceCenter";
 
 import AdminEmailCenter from "./pages/admin/AdminEmailCenter";
 import AdminBoosts from "./pages/admin/AdminBoosts";
@@ -131,13 +132,16 @@ import { LoadingProvider } from "./context/LoadingContext";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 min default — cuts repeat Supabase calls
-      gcTime: 30 * 60 * 1000,
+      // V1 Performance Engine defaults: everything static-first, event-driven.
+      // Queries only re-run after an explicit invalidateQueries().
+      staleTime: Infinity,
+      gcTime: 24 * 60 * 60 * 1000, // 24h
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       refetchOnReconnect: false,
-      retry: 1,
+      retry: false,
     },
+    mutations: { retry: false },
   },
 });
 
@@ -241,6 +245,7 @@ const App = () => {
                 <Route path="/admin/verifications" element={<AdminVerifications />} />
                 <Route path="/admin/cache" element={<AdminCacheMonitor />} />
                 <Route path="/admin/static-architecture" element={<AdminStaticArchitecture />} />
+                <Route path="/admin/performance" element={<AdminPerformanceCenter />} />
 
                 <Route path="/admin/email-center" element={<AdminEmailCenter />} />
                 <Route path="/admin/boosts" element={<AdminBoosts />} />
