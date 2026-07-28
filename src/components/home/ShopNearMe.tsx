@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { cachedFetch } from '@/lib/dataAccess';
 import { Store, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,28 +32,30 @@ const ShopNearMe = ({ userCountry }: ShopNearMeProps) => {
 
   const fetchShops = async () => {
     try {
-      let query = supabase
-        .from('shops')
-        .select('id, name, logo_url, trading_center, seller_id, country, description')
-        .eq('is_active', true)
-        .limit(20);
-      
-      if (userCountry) {
-        query = query.eq('country', userCountry);
-      }
-
-      const { data } = await query;
-      
-      if ((!data || data.length === 0) && userCountry) {
-        const { data: allShops } = await supabase
-          .from('shops')
-          .select('id, name, logo_url, trading_center, seller_id, country, description')
-          .eq('is_active', true)
-          .limit(20);
-        setShops(allShops || []);
-      } else {
-        setShops(data || []);
-      }
+      // 5-minute memory cache + dedupe via Data Access Manager. Prevents
+      // repeat homepage renders (or duplicate mounts) from re-hitting PostgREST.
+      const key = `shops:featured:${userCountry ?? 'ANY'}`;
+      const data = await cachedFetch(
+        key,
+        async () => {
+          const cols =
+            'id, name, logo_url, trading_center, seller_id, country, description';
+          let q = supabase.from('shops').select(cols).eq('is_active', true).limit(20);
+          if (userCountry) q = q.eq('country', userCountry);
+          const { data } = await q;
+          if ((!data || data.length === 0) && userCountry) {
+            const { data: fallback } = await supabase
+              .from('shops')
+              .select(cols)
+              .eq('is_active', true)
+              .limit(20);
+            return (fallback as Shop[] | null) || [];
+          }
+          return (data as Shop[] | null) || [];
+        },
+        5 * 60_000,
+      );
+      setShops(data);
     } catch (error) {
       console.error('Error fetching shops:', error);
     } finally {
