@@ -24,6 +24,8 @@ import {
   Zap,
   DollarSign,
   ShieldCheck,
+  AlertTriangle,
+  Activity,
 } from "lucide-react";
 import {
   getGuardStats,
@@ -236,6 +238,55 @@ export default function AdminPerformanceCenter() {
           <Stat label="Generated today" value={snap?.today.filesGenerated ?? 0} />
           <Stat label="Skipped (no-op)" value={snap?.today.filesSkipped ?? 0} />
           <Stat label="Errors today" value={snap?.today.errors ?? 0} tone={snap?.today.errors ? "bad" : undefined} />
+        </CardContent>
+      </Card>
+
+      {/* Polling detection */}
+      {guard.polling && guard.polling.length > 0 && (
+        <Card className="border-amber-500/40">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2 text-amber-600">
+              <AlertTriangle className="h-4 w-4" /> Polling detected (last 60s)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 text-sm font-mono">
+              {guard.polling.map((p) => (
+                <div key={p.path} className="flex items-center justify-between border-b py-1 last:border-0">
+                  <span className="truncate">{p.path}</span>
+                  <Badge variant="destructive">{p.perMin}/min</Badge>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Any public path served &gt;10×/min from a single session is likely a client-side polling loop.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top endpoints */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4" /> Top endpoints (session)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(!guard.top || guard.top.length === 0) ? (
+            <p className="text-sm text-muted-foreground">No traffic recorded yet.</p>
+          ) : (
+            <div className="space-y-1 text-sm font-mono">
+              {guard.top.map((t) => (
+                <div key={t.path} className="flex items-center justify-between border-b py-1 last:border-0 gap-3">
+                  <span className="truncate flex-1">{t.path}</span>
+                  <span className="text-xs text-muted-foreground">{t.lastMs}ms</span>
+                  {t.supabase > 0 && <Badge variant="destructive">{t.supabase} db</Badge>}
+                  <Badge variant="secondary">{t.count}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

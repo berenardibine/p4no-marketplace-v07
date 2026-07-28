@@ -58,6 +58,36 @@ const counters = {
   count: 0,
 };
 
+// Per-path stats for the Performance Center: top endpoints + polling detection.
+interface PathStat {
+  path: string;
+  count: number;
+  supabase: number;
+  violations: number;
+  lastMs: number;
+  hits: number[]; // rolling timestamps (last 60s) for polling detection
+}
+const pathStats = new Map<string, PathStat>();
+const POLLING_WINDOW_MS = 60_000;
+const POLLING_THRESHOLD = 10; // >10 hits/min to the SAME path from ONE session = suspicious
+
+function recordPathStat(evt: GuardEvent) {
+  let s = pathStats.get(evt.path);
+  if (!s) {
+    s = { path: evt.path, count: 0, supabase: 0, violations: 0, lastMs: 0, hits: [] };
+    pathStats.set(evt.path, s);
+  }
+  s.count += 1;
+  s.lastMs = evt.ms;
+  if (evt.source === 'supabase') s.supabase += 1;
+  if (evt.violation) s.violations += 1;
+  const now = evt.at;
+  s.hits.push(now);
+  // prune outside rolling window
+  const cutoff = now - POLLING_WINDOW_MS;
+  while (s.hits.length && s.hits[0] < cutoff) s.hits.shift();
+}
+
 function notify() {
   listeners.forEach((fn) => {
     try { fn(); } catch { /* ignore */ }
@@ -73,6 +103,7 @@ function record(evt: GuardEvent) {
   if (evt.violation) counters.violations += 1;
   counters.totalMs += evt.ms;
   counters.count += 1;
+  recordPathStat(evt);
 
   notify();
 }
@@ -111,6 +142,24 @@ export function subscribeGuardStats(fn: () => void): () => void {
 
 export function getGuardStats() {
   const total = counters.count || 1;
+  // Top 10 endpoints by request count.
+  const top = Array.from(pathStats.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+    .map((s) => ({
+      path: s.path,
+      count: s.count,
+      supabase: s.supabase,
+      violations: s.violations,
+      lastMs: s.lastMs,
+      perMin: s.hits.length,
+    }));
+  // Any path exceeding the polling threshold in the last 60s.
+  const polling = Array.from(pathStats.values())
+    .filter((s) => s.hits.length >= POLLING_THRESHOLD)
+    .sort((a, b) => b.hits.length - a.hits.length)
+    .slice(0, 10)
+    .map((s) => ({ path: s.path, perMin: s.hits.length }));
   return {
     ...counters,
     avgMs: Math.round(counters.totalMs / total),
@@ -119,6 +168,8 @@ export function getGuardStats() {
     blobPct: (counters.blob / total) * 100,
     supabasePct: (counters.supabase / total) * 100,
     recent: recent.slice(0, 50),
+    top,
+    polling,
   };
 }
 
