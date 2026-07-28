@@ -32,6 +32,7 @@ import {
   subscribeGuardStats,
 } from "@/lib/cdnGuard";
 import { getDataAccessStats } from "@/lib/dataAccess";
+import { getApiFirewallStats } from "@/lib/apiFirewall";
 
 interface Snapshot {
   manifestVersion: number | null;
@@ -68,6 +69,7 @@ const COST_PER_GB = 0.09;   // Supabase egress $/GB (public estimate)
 export default function AdminPerformanceCenter() {
   const [guard, setGuard] = useState(getGuardStats());
   const [dam, setDam] = useState(getDataAccessStats());
+  const [fw, setFw] = useState(getApiFirewallStats());
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -75,8 +77,12 @@ export default function AdminPerformanceCenter() {
     const unsub = subscribeGuardStats(() => {
       setGuard(getGuardStats());
       setDam(getDataAccessStats());
+      setFw(getApiFirewallStats());
     });
-    return unsub;
+    // Firewall stats are updated by fetch itself, not by guard events —
+    // poll cheaply from memory every 3s so the panel stays live.
+    const t = setInterval(() => setFw(getApiFirewallStats()), 3000);
+    return () => { unsub(); clearInterval(t); };
   }, []);
 
   const load = async () => {
@@ -217,6 +223,58 @@ export default function AdminPerformanceCenter() {
           <Stat label="Fetches executed" value={dam.misses} />
           <Stat label="Cache entries" value={dam.entries} />
           <Stat label="Hit rate" value={`${dam.hitRate.toFixed(1)}%`} />
+        </CardContent>
+      </Card>
+
+      {/* API Request Firewall */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" /> API Request Firewall
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <Stat label="PostgREST reads" value={fw.totalReads.toLocaleString()} />
+            <Stat label="PostgREST writes" value={fw.totalWrites.toLocaleString()} />
+            <Stat label="Blocked (strict)" value={fw.totalBlocked.toLocaleString()} tone={fw.totalBlocked ? "warn" : undefined} />
+            <Stat label="Tables touched" value={fw.tables} />
+          </div>
+          {fw.top.length > 0 && (
+            <div className="space-y-1 text-sm font-mono">
+              <div className="text-xs uppercase text-muted-foreground mb-1">Top tables (session)</div>
+              {fw.top.map((t) => (
+                <div key={t.table} className="flex items-center justify-between border-b py-1 last:border-0 gap-3">
+                  <span className="truncate flex-1">{t.table}</span>
+                  <span className="text-xs text-muted-foreground">{t.avgMs}ms</span>
+                  {t.blocked > 0 && <Badge variant="destructive">{t.blocked} blocked</Badge>}
+                  {t.errors > 0 && <Badge variant="destructive">{t.errors} err</Badge>}
+                  <Badge variant="secondary">R {t.reads}</Badge>
+                  <Badge variant="outline">W {t.writes}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
+          {fw.polling.length > 0 && (
+            <div className="rounded-md border border-amber-500/40 p-3 bg-amber-500/5">
+              <div className="flex items-center gap-2 text-amber-600 text-sm font-medium mb-1">
+                <AlertTriangle className="h-4 w-4" /> Table polling detected (last 60s)
+              </div>
+              <div className="space-y-1 text-xs font-mono">
+                {fw.polling.map((p) => (
+                  <div key={p.table} className="flex items-center justify-between">
+                    <span>{p.table}</span>
+                    <Badge variant="destructive">{p.perMin}/min</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Every PostgREST call in the browser is intercepted at fetch level. In strict static mode
+            public-table reads are refused at the network boundary (returned as empty arrays) so a
+            regressed hook cannot leak egress.
+          </p>
         </CardContent>
       </Card>
 
