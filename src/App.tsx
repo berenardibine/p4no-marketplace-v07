@@ -128,6 +128,10 @@ import FollowingPage from "./pages/FollowingPage";
 import BrowsingHistoryPage from "./pages/BrowsingHistoryPage";
 import PageTransitionSplash from "./components/layout/PageTransitionSplash";
 import { LoadingProvider } from "./context/LoadingContext";
+import { installApiFirewall } from "@/lib/apiFirewall";
+
+// Install the network-level firewall before any Supabase request fires.
+installApiFirewall();
 
 const queryClient = new QueryClient({
   defaultOptions: {
