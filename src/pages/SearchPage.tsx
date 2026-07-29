@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Search as SearchIcon, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+import { getContent } from '@/lib/cdnGuard';
 import Header from '@/components/layout/Header';
 import SearchModal from '@/components/layout/SearchModal';
 import FloatingProductCard from '@/components/home/FloatingProductCard';
@@ -28,21 +28,35 @@ const SearchPage = () => {
 
   useEffect(() => {
     if (!q) { setLoading(false); return; }
+    let cancelled = false;
     setLoading(true);
-    const from = (currentPage - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-    supabase
-      .from('products')
-      .select('id, title, price, images, rental_unit, sponsored, admin_posted, is_negotiable, currency_symbol, slug', { count: 'exact' })
-      .eq('status', 'active')
-      .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
-      .order('views', { ascending: false, nullsFirst: false })
-      .range(from, to)
-      .then(({ data, count }) => {
-        setProducts((data || []) as Product[]);
-        setTotalCount(count ?? 0);
-        setLoading(false);
-      });
+    // Static-first: filter the pre-built CDN search index in-memory. Zero
+    // PostgREST egress per query. Index is fetched once per session and
+    // cached in IndexedDB by cdnGuard.
+    (async () => {
+      const index = (await getContent<any[]>('search/search-index')) || [];
+      if (cancelled) return;
+      const needle = q.toLowerCase();
+      const matches = index
+        .filter((r) => r?.kind === 'product' && typeof r.title === 'string' && r.title.toLowerCase().includes(needle))
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          price: Number(r.price) || 0,
+          images: r.thumb ? [r.thumb] : [],
+          rental_unit: null,
+          sponsored: null,
+          admin_posted: null,
+          is_negotiable: null,
+          currency_symbol: null,
+          slug: r.slug ?? null,
+        })) as Product[];
+      const from = (currentPage - 1) * PAGE_SIZE;
+      setProducts(matches.slice(from, from + PAGE_SIZE));
+      setTotalCount(matches.length);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [q, currentPage]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));

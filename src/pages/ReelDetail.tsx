@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getCachedReelDetail } from '@/lib/contentCache';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 import ReelItem from '@/components/reels/ReelItem';
 import PageMetaTags from '@/components/seo/PageMetaTags';
 import VideoJsonLd from '@/components/seo/VideoJsonLd';
@@ -36,6 +37,11 @@ const ReelDetail = () => {
           setReel(cached as Reel);
           setLoading(false);
         }
+        return;
+      }
+      if (isStrictStaticMode()) {
+        // Strict mode: never hit PostgREST for public content.
+        if (!cancelled) { setReel(null); setLoading(false); }
         return;
       }
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
