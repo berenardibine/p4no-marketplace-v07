@@ -233,7 +233,7 @@ export const useCategories = (type?: string) => {
   const fetchCategories = async () => {
     try {
       let rows = await getContent<any[]>('categories/all');
-      if (!rows && !isStrictStaticMode()) {
+      if (!Array.isArray(rows) && !isStrictStaticMode()) {
         let query = supabase.from('categories').select('*').order('name');
         if (type) query = query.eq('type', type);
         const { data } = await query;
