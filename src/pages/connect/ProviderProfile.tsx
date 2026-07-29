@@ -2,6 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ShieldCheck, Star, MapPin, Phone, MessageCircle, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { getContent } from '@/lib/cdnGuard';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 import { useServices } from '@/hooks/useServices';
 import ServiceCard from '@/components/connect/ServiceCard';
 import { Button } from '@/components/ui/button';
@@ -25,13 +27,23 @@ const ProviderProfile = () => {
 
   useEffect(() => {
     if (!lookup) return;
-    const q = supabase.from('profiles').select('*');
-    (isUuid ? q.eq('id', lookup) : q.eq('slug', lookup))
-      .maybeSingle()
-      .then(({ data }) => {
-        setProfile(data);
-        if (data?.id) logActivity({ event_type: 'provider_view', entity_type: 'provider', entity_id: data.id });
-      });
+    let cancelled = false;
+    (async () => {
+      // Static-first: seller profile is a pre-built CDN JSON.
+      const cached = await getContent<any>(`sellers/${lookup}`);
+      if (cached && !cancelled) {
+        setProfile(cached);
+        if (cached?.id) logActivity({ event_type: 'provider_view', entity_type: 'provider', entity_id: cached.id });
+        return;
+      }
+      if (isStrictStaticMode()) return; // strict mode: never fall back to DB
+      const q = supabase.from('profiles').select('*');
+      const { data } = await (isUuid ? q.eq('id', lookup) : q.eq('slug', lookup)).maybeSingle();
+      if (cancelled) return;
+      setProfile(data);
+      if (data?.id) logActivity({ event_type: 'provider_view', entity_type: 'provider', entity_id: data.id });
+    })();
+    return () => { cancelled = true; };
   }, [lookup, isUuid]);
 
   if (!profile) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
