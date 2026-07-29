@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { getContent } from '@/lib/cdnGuard';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 
 export interface Shop {
   id: string;
@@ -139,12 +141,24 @@ export const useShop = (shopId: string | undefined) => {
     
     try {
       setLoading(true);
+      // Static-first: try `shops/${slug-or-id}` from CDN, then all-shops list,
+      // then fall back to Supabase only outside strict mode.
+      const staticShop = await getContent<any>(`shops/${shopId}`);
+      if (staticShop) {
+        setShop(staticShop as Shop);
+        return;
+      }
+      const allShops = await getContent<any[]>('shops/all');
+      if (Array.isArray(allShops)) {
+        const match = allShops.find((s: any) => s.id === shopId || s.slug === shopId);
+        if (match) { setShop(match as Shop); return; }
+      }
+      if (isStrictStaticMode()) { setShop(null); return; }
       const { data } = await supabase
         .from('shops')
         .select('*')
         .eq('id', shopId)
         .single();
-
       setShop(data);
     } catch (err) {
       console.error('Error fetching shop:', err);

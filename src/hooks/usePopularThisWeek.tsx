@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { PRODUCT_CARD_FIELDS, SERVICE_CARD_FIELDS, ARTICLE_CARD_FIELDS } from '@/lib/queryFields';
 import { getCachedList } from '@/lib/productCache';
 import { REDIS_ONLY } from '@/lib/cacheFlags';
+import { getContent } from '@/lib/cdnGuard';
+import { isStrictStaticMode } from '@/lib/staticFlags';
 
 
 export type PopularItemType = 'product' | 'service' | 'reel' | 'article';
@@ -26,7 +28,19 @@ export const usePopularThisWeek = (itemType: PopularItemType, limit = 12) => {
     (async () => {
       setLoading(true);
 
-      // Fast path: serve products popular list from Redis cache.
+      // Static-first: try the pre-generated popular lists on the CDN.
+      const staticPath =
+        itemType === 'product' ? 'products/popular'
+        : itemType === 'service' ? 'services/popular'
+        : itemType === 'reel' ? 'reels/popular'
+        : 'articles/popular';
+      const staticRows = await getContent<any[]>(staticPath);
+      if (Array.isArray(staticRows) && active) {
+        setItems(staticRows.slice(0, limit));
+        setLoading(false);
+        return;
+      }
+      // Legacy Redis fallback for products only.
       if (itemType === 'product') {
         const cached = await getCachedList('popular');
         if (Array.isArray(cached) && cached.length > 0 && active) {
@@ -34,14 +48,8 @@ export const usePopularThisWeek = (itemType: PopularItemType, limit = 12) => {
           setLoading(false);
           return;
         }
-        if (REDIS_ONLY) {
-          if (active) { setItems([]); setLoading(false); }
-          return;
-        }
       }
-
-      if (REDIS_ONLY) {
-        // Non-product popular lists not in Redis yet; refuse DB in strict mode.
+      if (isStrictStaticMode() || REDIS_ONLY) {
         if (active) { setItems([]); setLoading(false); }
         return;
       }
