@@ -26,6 +26,7 @@ import ProfileCompletionBanner from "@/components/auth/ProfileCompletionBanner";
 import CategoryCarousel from "@/components/home/CategoryCarousel";
 import HomeCategoriesGrid from "@/components/home/HomeCategoriesGrid";
 import FeatureGate from "@/components/system/FeatureGate";
+import { useFeature } from "@/hooks/useFeatureFlags";
 import { useAuth } from "@/hooks/useAuth";
 import { useDynamicHomeFeed } from "@/hooks/useDynamicHomeFeed";
 import { useGeo } from "@/context/GeoContext";
@@ -66,6 +67,7 @@ const Index = () => {
   } = useDynamicHomeFeed(feedCountry);
 
   const isSeller = profile?.user_type === 'seller';
+  const newArrivalsEnabled = useFeature('new_arrivals');
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const handleSentinelRef = useCallback((node: HTMLDivElement | null) => {
