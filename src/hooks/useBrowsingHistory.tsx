@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 export type HistoryItemType = 'product' | 'service' | 'article';
 
 export const trackBrowsingHistory = async (itemType: HistoryItemType, itemId: string) => {
+  // Feature Guard: Recently Viewed off → no tracking, no writes at all.
+  if (!isFeatureEnabled('recently_viewed')) return;
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -18,6 +21,7 @@ export const useBrowsingHistory = (itemType: HistoryItemType, limit = 30) => {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (!isFeatureEnabled('recently_viewed')) { setItems([]); setLoading(false); return; }
     if (!user) { setItems([]); setLoading(false); return; }
     setLoading(true);
     const { data: rows } = await supabase
@@ -39,13 +43,13 @@ export const useBrowsingHistory = (itemType: HistoryItemType, limit = 30) => {
   useEffect(() => { load(); }, [load]);
 
   const remove = async (itemId: string) => {
-    if (!user) return;
+    if (!user || !isFeatureEnabled('recently_viewed')) return;
     await supabase.from('browsing_history').delete().eq('user_id', user.id).eq('item_type', itemType).eq('item_id', itemId);
     load();
   };
 
   const clearAll = async () => {
-    if (!user) return;
+    if (!user || !isFeatureEnabled('recently_viewed')) return;
     await supabase.from('browsing_history').delete().eq('user_id', user.id).eq('item_type', itemType);
     load();
   };
