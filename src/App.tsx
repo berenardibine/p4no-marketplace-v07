@@ -104,6 +104,7 @@ import AdminBoosts from "./pages/admin/AdminBoosts";
 import AdminReviews from "./pages/admin/AdminReviews";
 import AdminDiscounts from "./pages/admin/AdminDiscounts";
 import AdminSystemUsage from "./pages/admin/AdminSystemUsage";
+import AdminFeatureToggles from "./pages/admin/AdminFeatureToggles";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPushDebug from "./pages/admin/AdminPushDebug";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
@@ -256,6 +257,7 @@ const App = () => {
                 <Route path="/admin/reviews" element={<AdminReviews />} />
                 <Route path="/admin/discounts" element={<AdminDiscounts />} />
                 <Route path="/admin/system-usage" element={<AdminSystemUsage />} />
+                <Route path="/admin/feature-toggles" element={<AdminFeatureToggles />} />
                 <Route path="/admin/tasks" element={<AdminTasks />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/services" element={<AdminServices />} />
