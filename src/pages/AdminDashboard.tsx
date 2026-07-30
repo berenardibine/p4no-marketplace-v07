@@ -149,6 +149,7 @@ const AdminDashboard = () => {
     { id: 'reviews', label: 'Reviews', icon: Star, color: 'from-amber-500 to-yellow-500', bg: 'bg-amber-50 dark:bg-amber-950/30', path: '/admin/reviews', description: 'Seller ratings' },
     { id: 'discounts', label: 'Discounts', icon: Tag, color: 'from-red-500 to-pink-500', bg: 'bg-red-50 dark:bg-red-950/30', path: '/admin/discounts', description: 'Smart discounts' },
     { id: 'system-usage', label: 'System', icon: Activity, color: 'from-slate-500 to-zinc-500', bg: 'bg-slate-50 dark:bg-slate-950/30', path: '/admin/system-usage', description: 'Usage & health' },
+    { id: 'feature-toggles', label: 'Features', icon: Activity, color: 'from-cyan-500 to-blue-500', bg: 'bg-cyan-50 dark:bg-cyan-950/30', path: '/admin/feature-toggles', description: 'Enable / shut down modules' },
     { id: 'tasks', label: 'Tasks', icon: Target, color: 'from-blue-500 to-indigo-500', bg: 'bg-blue-50 dark:bg-blue-950/30', path: '/admin/tasks', description: 'Tasks & rewards' },
     { id: 'orders', label: 'Orders', icon: ShoppingCart, color: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30', path: '/admin/orders', description: 'All orders' },
     { id: 'services', label: 'Services', icon: Briefcase, color: 'from-pink-500 to-rose-500', bg: 'bg-pink-50 dark:bg-pink-950/30', path: '/admin/services', description: 'P4NO Connect moderation' },
