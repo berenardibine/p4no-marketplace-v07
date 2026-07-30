@@ -189,7 +189,7 @@ const App = () => {
                 <Route path="/" element={<Index />} />
                 <Route path="/reels" element={<FeatureRoute feature="reels_module"><ReelsPage /></FeatureRoute>} />
                 <Route path="/reels/:slugOrId" element={<FeatureRoute feature="reels_module"><ReelDetail /></FeatureRoute>} />
-                <Route path="/reel/:slugOrId" element={<ReelDetail />} />
+                <Route path="/reel/:slugOrId" element={<FeatureRoute feature="reels_module"><ReelDetail /></FeatureRoute>} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/search/:q" element={<SearchPage />} />
                 <Route path="/search/:q/page/:page" element={<SearchPage />} />
@@ -198,7 +198,7 @@ const App = () => {
                 <Route path="/onboarding/account-type" element={<OnboardingAccountType />} />
                 <Route path="/saved" element={<SavedPage />} />
                 <Route path="/following" element={<FollowingPage />} />
-                <Route path="/browsing-history" element={<ProtectedRoute><BrowsingHistoryPage /></ProtectedRoute>} />
+                <Route path="/browsing-history" element={<FeatureRoute feature="recently_viewed"><ProtectedRoute><BrowsingHistoryPage /></ProtectedRoute></FeatureRoute>} />
                 <Route path="/complete-profile/phone" element={<CompleteProfilePhone />} />
                 <Route path="/complete-profile" element={<CompleteProfile />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
@@ -280,7 +280,7 @@ const App = () => {
                 <Route path="/insights/category/:slug/page/:page" element={<FeatureRoute feature="articles_module"><InsightCategory /></FeatureRoute>} />
                 <Route path="/insights/article/:slug" element={<FeatureRoute feature="articles_module"><InsightArticle /></FeatureRoute>} />
                 <Route path="/insights/search/:q" element={<FeatureRoute feature="articles_module"><InsightSearch /></FeatureRoute>} />
-                <Route path="/checkout" element={<ProtectedRoute allowGuest><CheckoutPage /></ProtectedRoute>} />
+                <Route path="/checkout" element={<FeatureRoute feature="mark_order_system"><ProtectedRoute allowGuest><CheckoutPage /></ProtectedRoute></FeatureRoute>} />
                 <Route path="/verify-identity" element={<VerifyIdentity />} />
 
                 <Route path="/menu" element={<MenuPage />} />
@@ -314,7 +314,7 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </ErrorBoundary>
-              <FloatingCartBar />
+              <FeatureGate feature="mark_order_system"><FloatingCartBar /></FeatureGate>
               <GoogleReviewPopup />
               <InstallPrompt />
             </BrowserRouter>
