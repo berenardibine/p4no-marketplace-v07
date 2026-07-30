@@ -131,7 +131,7 @@ import PageTransitionSplash from "./components/layout/PageTransitionSplash";
 import { LoadingProvider } from "./context/LoadingContext";
 import { installApiFirewall } from "@/lib/apiFirewall";
 import { loadFeatureFlags } from "@/lib/featureFlags";
-import { FeatureRoute } from "@/components/system/FeatureGate";
+import FeatureGate, { FeatureRoute } from "@/components/system/FeatureGate";
 
 // Install the network-level firewall before any Supabase request fires.
 installApiFirewall();
