@@ -130,9 +130,13 @@ import BrowsingHistoryPage from "./pages/BrowsingHistoryPage";
 import PageTransitionSplash from "./components/layout/PageTransitionSplash";
 import { LoadingProvider } from "./context/LoadingContext";
 import { installApiFirewall } from "@/lib/apiFirewall";
+import { loadFeatureFlags } from "@/lib/featureFlags";
+import { FeatureRoute } from "@/components/system/FeatureGate";
 
 // Install the network-level firewall before any Supabase request fires.
 installApiFirewall();
+// One tiny read per session; guards answer synchronously from localStorage meanwhile.
+loadFeatureFlags();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -183,8 +187,8 @@ const App = () => {
               <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/reels" element={<ReelsPage />} />
-                <Route path="/reels/:slugOrId" element={<ReelDetail />} />
+                <Route path="/reels" element={<FeatureRoute feature="reels_module"><ReelsPage /></FeatureRoute>} />
+                <Route path="/reels/:slugOrId" element={<FeatureRoute feature="reels_module"><ReelDetail /></FeatureRoute>} />
                 <Route path="/reel/:slugOrId" element={<ReelDetail />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/search/:q" element={<SearchPage />} />
@@ -217,7 +221,7 @@ const App = () => {
 
                 {/* P4NO Connect */}
                 <Route path="/connect" element={<ConnectHome />} />
-                <Route path="/connect/reels" element={<ConnectReels />} />
+                <Route path="/connect/reels" element={<FeatureRoute feature="reels_module"><ConnectReels /></FeatureRoute>} />
                 <Route path="/connect/category/:slug" element={<ConnectCategory />} />
                 <Route path="/connect/service/:slugOrId" element={<ServiceDetail />} />
                 <Route path="/connect/provider/:userId" element={<ProviderProfile />} />
@@ -271,11 +275,11 @@ const App = () => {
                 <Route path="/admin/seller-badges" element={<AdminSellerBadges />} />
 
                 {/* P4NO Insights */}
-                <Route path="/insights" element={<InsightsHome />} />
-                <Route path="/insights/category/:slug" element={<InsightCategory />} />
-                <Route path="/insights/category/:slug/page/:page" element={<InsightCategory />} />
-                <Route path="/insights/article/:slug" element={<InsightArticle />} />
-                <Route path="/insights/search/:q" element={<InsightSearch />} />
+                <Route path="/insights" element={<FeatureRoute feature="articles_module"><InsightsHome /></FeatureRoute>} />
+                <Route path="/insights/category/:slug" element={<FeatureRoute feature="articles_module"><InsightCategory /></FeatureRoute>} />
+                <Route path="/insights/category/:slug/page/:page" element={<FeatureRoute feature="articles_module"><InsightCategory /></FeatureRoute>} />
+                <Route path="/insights/article/:slug" element={<FeatureRoute feature="articles_module"><InsightArticle /></FeatureRoute>} />
+                <Route path="/insights/search/:q" element={<FeatureRoute feature="articles_module"><InsightSearch /></FeatureRoute>} />
                 <Route path="/checkout" element={<ProtectedRoute allowGuest><CheckoutPage /></ProtectedRoute>} />
                 <Route path="/verify-identity" element={<VerifyIdentity />} />
 
