@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 
 export interface Reel {
@@ -49,6 +50,12 @@ export const useReels = (mode: ReelMode = 'foryou', startId?: string | null) => 
 
   const fetchPage = useCallback(async () => {
     if (loading) return;
+    // Feature Guard: Reels module off → behave as if reels do not exist.
+    if (!isFeatureEnabled('reels_module')) {
+      setHasMore(false);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const from = pageRef.current * PAGE_SIZE;
