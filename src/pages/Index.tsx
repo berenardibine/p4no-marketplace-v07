@@ -25,6 +25,7 @@ import ReferralBanner from "@/components/referral/ReferralBanner";
 import ProfileCompletionBanner from "@/components/auth/ProfileCompletionBanner";
 import CategoryCarousel from "@/components/home/CategoryCarousel";
 import HomeCategoriesGrid from "@/components/home/HomeCategoriesGrid";
+import FeatureGate from "@/components/system/FeatureGate";
 import { useAuth } from "@/hooks/useAuth";
 import { useDynamicHomeFeed } from "@/hooks/useDynamicHomeFeed";
 import { useGeo } from "@/context/GeoContext";
@@ -158,7 +159,9 @@ const Index = () => {
         </section>
 
         {/* Categories grid — Redis-first, restored */}
-        <HomeCategoriesGrid />
+        <FeatureGate feature="categories_section">
+          <HomeCategoriesGrid />
+        </FeatureGate>
 
         {/* P4NO Connect — quick promo so users find services easily */}
         <section className="animate-fade-up">
@@ -182,14 +185,20 @@ const Index = () => {
 
         {/* Featured */}
         <BoostedProducts />
-        <HomeReels />
-        <InsightsHomeSlider />
+        <FeatureGate feature="reels_module">
+          <HomeReels />
+        </FeatureGate>
+        <FeatureGate feature="articles_module">
+          <InsightsHomeSlider />
+        </FeatureGate>
         <ServicesSection />
         <FeaturedProducts userCountry={feedCountry} />
-        <PopularThisWeek />
+        <FeatureGate feature="popular_this_week">
+          <PopularThisWeek />
+        </FeatureGate>
 
         {/* New Arrivals */}
-        {newArrivals.length > 0 && (
+        {newArrivalsEnabled && newArrivals.length > 0 && (
           <section className="animate-fade-up" style={{ animationDelay: "0.15s" }}>
             <AutoScrollCarousel
               title="New Arrivals"
@@ -220,14 +229,18 @@ const Index = () => {
         ))}
 
         {/* Today's Best Deals (cheapest products) */}
-        <section className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
-          <TodayBestDeals userCountry={feedCountry} />
-        </section>
+        <FeatureGate feature="best_deals">
+          <section className="animate-fade-up" style={{ animationDelay: "0.25s" }}>
+            <TodayBestDeals userCountry={feedCountry} />
+          </section>
+        </FeatureGate>
 
         {/* Shop Near Me */}
-        <section className="animate-fade-up" style={{ animationDelay: "0.28s" }}>
-          <ShopNearMe userCountry={isCountryOnly ? country || undefined : undefined} />
-        </section>
+        <FeatureGate feature="homepage_shop_section">
+          <section className="animate-fade-up" style={{ animationDelay: "0.28s" }}>
+            <ShopNearMe userCountry={isCountryOnly ? country || undefined : undefined} />
+          </section>
+        </FeatureGate>
 
         {/* Dynamic Feed */}
         <section className="space-y-5">
