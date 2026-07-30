@@ -77,6 +77,7 @@ export const useAdminOrders = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
+      if (!ordersOn()) { setOrders([]); return; }
       const { data } = await supabase
         .from('orders')
         .select('*, order_items(*, products(title, images, price, currency_symbol)), profiles:seller_id(full_name, whatsapp_number)')
