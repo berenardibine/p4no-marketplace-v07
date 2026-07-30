@@ -104,6 +104,7 @@ import AdminBoosts from "./pages/admin/AdminBoosts";
 import AdminReviews from "./pages/admin/AdminReviews";
 import AdminDiscounts from "./pages/admin/AdminDiscounts";
 import AdminSystemUsage from "./pages/admin/AdminSystemUsage";
+import AdminFeatureToggles from "./pages/admin/AdminFeatureToggles";
 import AdminTasks from "./pages/admin/AdminTasks";
 import AdminPushDebug from "./pages/admin/AdminPushDebug";
 import NotificationSettingsPage from "./pages/NotificationSettingsPage";
@@ -129,9 +130,13 @@ import BrowsingHistoryPage from "./pages/BrowsingHistoryPage";
 import PageTransitionSplash from "./components/layout/PageTransitionSplash";
 import { LoadingProvider } from "./context/LoadingContext";
 import { installApiFirewall } from "@/lib/apiFirewall";
+import { loadFeatureFlags } from "@/lib/featureFlags";
+import FeatureGate, { FeatureRoute } from "@/components/system/FeatureGate";
 
 // Install the network-level firewall before any Supabase request fires.
 installApiFirewall();
+// One tiny read per session; guards answer synchronously from localStorage meanwhile.
+loadFeatureFlags();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -182,9 +187,9 @@ const App = () => {
               <ErrorBoundary>
               <Routes>
                 <Route path="/" element={<Index />} />
-                <Route path="/reels" element={<ReelsPage />} />
-                <Route path="/reels/:slugOrId" element={<ReelDetail />} />
-                <Route path="/reel/:slugOrId" element={<ReelDetail />} />
+                <Route path="/reels" element={<FeatureRoute feature="reels_module"><ReelsPage /></FeatureRoute>} />
+                <Route path="/reels/:slugOrId" element={<FeatureRoute feature="reels_module"><ReelDetail /></FeatureRoute>} />
+                <Route path="/reel/:slugOrId" element={<FeatureRoute feature="reels_module"><ReelDetail /></FeatureRoute>} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/search/:q" element={<SearchPage />} />
                 <Route path="/search/:q/page/:page" element={<SearchPage />} />
@@ -193,7 +198,7 @@ const App = () => {
                 <Route path="/onboarding/account-type" element={<OnboardingAccountType />} />
                 <Route path="/saved" element={<SavedPage />} />
                 <Route path="/following" element={<FollowingPage />} />
-                <Route path="/browsing-history" element={<ProtectedRoute><BrowsingHistoryPage /></ProtectedRoute>} />
+                <Route path="/browsing-history" element={<FeatureRoute feature="recently_viewed"><ProtectedRoute><BrowsingHistoryPage /></ProtectedRoute></FeatureRoute>} />
                 <Route path="/complete-profile/phone" element={<CompleteProfilePhone />} />
                 <Route path="/complete-profile" element={<CompleteProfile />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
@@ -216,7 +221,7 @@ const App = () => {
 
                 {/* P4NO Connect */}
                 <Route path="/connect" element={<ConnectHome />} />
-                <Route path="/connect/reels" element={<ConnectReels />} />
+                <Route path="/connect/reels" element={<FeatureRoute feature="reels_module"><ConnectReels /></FeatureRoute>} />
                 <Route path="/connect/category/:slug" element={<ConnectCategory />} />
                 <Route path="/connect/service/:slugOrId" element={<ServiceDetail />} />
                 <Route path="/connect/provider/:userId" element={<ProviderProfile />} />
@@ -256,6 +261,7 @@ const App = () => {
                 <Route path="/admin/reviews" element={<AdminReviews />} />
                 <Route path="/admin/discounts" element={<AdminDiscounts />} />
                 <Route path="/admin/system-usage" element={<AdminSystemUsage />} />
+                <Route path="/admin/feature-toggles" element={<AdminFeatureToggles />} />
                 <Route path="/admin/tasks" element={<AdminTasks />} />
                 <Route path="/admin/orders" element={<AdminOrders />} />
                 <Route path="/admin/services" element={<AdminServices />} />
@@ -269,12 +275,12 @@ const App = () => {
                 <Route path="/admin/seller-badges" element={<AdminSellerBadges />} />
 
                 {/* P4NO Insights */}
-                <Route path="/insights" element={<InsightsHome />} />
-                <Route path="/insights/category/:slug" element={<InsightCategory />} />
-                <Route path="/insights/category/:slug/page/:page" element={<InsightCategory />} />
-                <Route path="/insights/article/:slug" element={<InsightArticle />} />
-                <Route path="/insights/search/:q" element={<InsightSearch />} />
-                <Route path="/checkout" element={<ProtectedRoute allowGuest><CheckoutPage /></ProtectedRoute>} />
+                <Route path="/insights" element={<FeatureRoute feature="articles_module"><InsightsHome /></FeatureRoute>} />
+                <Route path="/insights/category/:slug" element={<FeatureRoute feature="articles_module"><InsightCategory /></FeatureRoute>} />
+                <Route path="/insights/category/:slug/page/:page" element={<FeatureRoute feature="articles_module"><InsightCategory /></FeatureRoute>} />
+                <Route path="/insights/article/:slug" element={<FeatureRoute feature="articles_module"><InsightArticle /></FeatureRoute>} />
+                <Route path="/insights/search/:q" element={<FeatureRoute feature="articles_module"><InsightSearch /></FeatureRoute>} />
+                <Route path="/checkout" element={<FeatureRoute feature="mark_order_system"><ProtectedRoute allowGuest><CheckoutPage /></ProtectedRoute></FeatureRoute>} />
                 <Route path="/verify-identity" element={<VerifyIdentity />} />
 
                 <Route path="/menu" element={<MenuPage />} />
@@ -308,7 +314,7 @@ const App = () => {
                 <Route path="*" element={<NotFound />} />
               </Routes>
               </ErrorBoundary>
-              <FloatingCartBar />
+              <FeatureGate feature="mark_order_system"><FloatingCartBar /></FeatureGate>
               <GoogleReviewPopup />
               <InstallPrompt />
             </BrowserRouter>

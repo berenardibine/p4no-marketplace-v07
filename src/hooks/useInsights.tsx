@@ -3,6 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
 import { waitForPath } from '@/lib/staticCDN';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+
+const articlesOn = () => isFeatureEnabled('articles_module');
 
 
 export interface InsightCategory {
@@ -48,6 +51,7 @@ export const useInsightCategories = () =>
   useQuery({
     queryKey: ['insight-categories'],
     queryFn: async (): Promise<InsightCategory[]> => {
+      if (!articlesOn()) return [];
       const staticCats = await getContent<InsightCategory[]>('categories/insights');
       if (Array.isArray(staticCats)) {
         return staticCats.filter((c) => c.is_active !== false)
@@ -68,6 +72,7 @@ export const useInsightArticles = (opts: { categorySlug?: string; limit?: number
   useQuery({
     queryKey: ['insight-articles', opts],
     queryFn: async (): Promise<{ rows: InsightArticle[]; count: number }> => {
+      if (!articlesOn()) return { rows: [], count: 0 };
       const limit = opts.limit ?? 12;
       const offset = opts.offset ?? 0;
 
@@ -112,6 +117,7 @@ export const useInsightArticle = (slug: string | undefined) =>
     queryKey: ['insight-article', slug],
     enabled: !!slug,
     queryFn: async (): Promise<InsightArticle | null> => {
+      if (!articlesOn()) return null;
       // Static-first article detail.
       const cached = await getContent<InsightArticle>(`article/${slug}`);
       if (cached) {

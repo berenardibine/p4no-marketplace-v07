@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isFeatureEnabled } from "@/lib/featureFlags";
+
+const ordersOn = () => isFeatureEnabled('mark_order_system');
 
 export const useSellerOrders = () => {
   const { user } = useAuth();
@@ -9,6 +12,7 @@ export const useSellerOrders = () => {
   const [newCount, setNewCount] = useState(0);
 
   const fetchOrders = async () => {
+    if (!ordersOn()) { setOrders([]); setLoading(false); return; }
     if (!user) { setOrders([]); setLoading(false); return; }
     setLoading(true);
     try {
@@ -26,6 +30,7 @@ export const useSellerOrders = () => {
   };
 
   const updateOrderStatus = async (orderId: string, status: string) => {
+    if (!ordersOn()) return;
     try {
       await supabase.from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', orderId);
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
@@ -36,7 +41,7 @@ export const useSellerOrders = () => {
 
   // Initial fetch + realtime subscription
   useEffect(() => {
-    if (!user) return;
+    if (!user || !ordersOn()) return;
     fetchOrders();
 
     const channel = supabase
@@ -72,6 +77,7 @@ export const useAdminOrders = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
+      if (!ordersOn()) { setOrders([]); return; }
       const { data } = await supabase
         .from('orders')
         .select('*, order_items(*, products(title, images, price, currency_symbol)), profiles:seller_id(full_name, whatsapp_number)')

@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useProcessedUpload } from "@/hooks/useProcessedUpload";
 import { validateImageFile, uploadToCloudinary, optimizeCloudinaryUrl } from "@/lib/cloudinary";
 import { processAndUploadVideo, VIDEO_LIMITS, type UploadProgress } from "@/lib/videoProcessor";
+import FeatureGate from "@/components/system/FeatureGate";
 import { Video, X as XIcon } from "lucide-react";
 
 interface ProductFormProps {
@@ -607,6 +608,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
         </div>
 
         {/* Short Video (max 30s) */}
+        <FeatureGate feature="reels_module">
         <div className="space-y-2">
           <Label>Short Video (optional, max {VIDEO_LIMITS.MAX_DURATION}s)</Label>
           {videoUrl ? (
@@ -642,6 +644,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
             </label>
           )}
         </div>
+        </FeatureGate>
 
         {/* Location Info */}
         <div className="bg-primary/5 rounded-xl p-4">

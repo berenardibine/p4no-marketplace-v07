@@ -18,6 +18,7 @@
 import { isStrictStaticMode } from './staticFlags';
 import { isPublicTable } from './publicReadGuard';
 import { markViolation } from './cdnGuard';
+import { disabledFeatureTables } from './featureFlags';
 
 const REST_MARKER = '/rest/v1/';
 const POLLING_WINDOW_MS = 60_000;
@@ -95,6 +96,18 @@ export function installApiFirewall() {
       markViolation(`rest:${table}`, 'firewall-blocked');
       // Return an empty PostgREST-compatible response so callers don't crash.
       return new Response('[]', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Feature Guard: a disabled module's exclusive tables get ZERO traffic
+    // (reads AND writes), no matter which code path attempted the call.
+    if (disabledFeatureTables().has(table)) {
+      stat.blocked += 1;
+      totalBlocked += 1;
+      markViolation(`rest:${table}`, 'feature-disabled');
+      return new Response(isRead ? '[]' : '{}', {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });

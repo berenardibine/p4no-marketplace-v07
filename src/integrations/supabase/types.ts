@@ -855,6 +855,51 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          category: string
+          created_at: string
+          dependencies: string[]
+          description: string
+          enabled: boolean
+          est_db_savings: string
+          est_egress_savings: string
+          jobs: string[]
+          key: string
+          label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          dependencies?: string[]
+          description?: string
+          enabled?: boolean
+          est_db_savings?: string
+          est_egress_savings?: string
+          jobs?: string[]
+          key: string
+          label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          dependencies?: string[]
+          description?: string
+          enabled?: boolean
+          est_db_savings?: string
+          est_egress_savings?: string
+          jobs?: string[]
+          key?: string
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       featured_products: {
         Row: {
           created_at: string | null
@@ -5961,7 +6006,12 @@ export type Database = {
         Returns: string
       }
       ensure_growth_bootstrap: { Args: { _user: string }; Returns: undefined }
+      entity_feature_enabled: {
+        Args: { _entity_type: string }
+        Returns: boolean
+      }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      feature_enabled: { Args: { _key: string }; Returns: boolean }
       gcfg: { Args: { _key: string }; Returns: Json }
       generate_profile_slug: {
         Args: { base: string; pid: string }

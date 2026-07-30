@@ -5,6 +5,7 @@ import { getCachedList } from '@/lib/productCache';
 import { REDIS_ONLY } from '@/lib/cacheFlags';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 
 export type PopularItemType = 'product' | 'service' | 'reel' | 'article';
@@ -25,6 +26,14 @@ export const usePopularThisWeek = (itemType: PopularItemType, limit = 12) => {
 
   useEffect(() => {
     let active = true;
+    // Feature Guard: module off → no static fetch, no DB read, nothing.
+    if (!isFeatureEnabled('popular_this_week')
+      || (itemType === 'reel' && !isFeatureEnabled('reels_module'))
+      || (itemType === 'article' && !isFeatureEnabled('articles_module'))) {
+      setItems([]);
+      setLoading(false);
+      return () => { active = false; };
+    }
     (async () => {
       setLoading(true);
 
