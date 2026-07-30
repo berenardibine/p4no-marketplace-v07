@@ -113,6 +113,7 @@ export const useReels = (mode: ReelMode = 'foryou', startId?: string | null) => 
 
   useEffect(() => {
     let cancelled = false;
+    if (!isFeatureEnabled('reels_module')) { setReels([]); setHasMore(false); return; }
     pageRef.current = 0;
     seenIds.current.clear();
     setReels([]);
