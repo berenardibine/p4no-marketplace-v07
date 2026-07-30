@@ -40,6 +40,7 @@ import OrderNowButton from "@/components/order/OrderNowButton";
 import FollowButton from "@/components/social/FollowButton";
 import SaveButton from "@/components/social/SaveButton";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
+import FeatureGate from "@/components/system/FeatureGate";
 import GuestPromptDialog from "@/components/auth/GuestPromptDialog";
 import { Lock } from "lucide-react";
 import RelatedProducts from "@/components/products/RelatedProducts";
@@ -384,6 +385,7 @@ const ProductDetail = () => {
 
         {/* Video Thumbnail — opens TikTok-style fullscreen reel */}
         {product.video_url && (
+          <FeatureGate feature="reels_module">
           <div className="p-4 max-w-2xl mx-auto">
             <button
               type="button"
@@ -421,6 +423,7 @@ const ProductDetail = () => {
               </div>
             </button>
           </div>
+          </FeatureGate>
         )}
 
             {/* Secondary actions under image */}
@@ -622,7 +625,9 @@ const ProductDetail = () => {
 
           {/* Recently Viewed by user — under description */}
           <DeferUntilVisible minHeight={140}>
-            <RecentlyViewed itemType="product" excludeId={product.id} />
+            <FeatureGate feature="recently_viewed">
+              <RecentlyViewed itemType="product" excludeId={product.id} />
+            </FeatureGate>
           </DeferUntilVisible>
 
           {/* Seller Info */}
