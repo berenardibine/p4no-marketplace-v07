@@ -305,6 +305,46 @@ export default function AdminPerformanceCenter() {
         </CardContent>
       </Card>
 
+      {/* Zero-DB verification */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" /> Zero-DB verification
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <Stat label="Background requests" value={backgroundRequests} tone={backgroundRequests ? "warn" : undefined} />
+            <Stat label="Polling loops" value={pollingCount} tone={pollingCount ? "bad" : undefined} />
+            <Stat label="Running generators" value={snap?.runningGenerators ?? 0} />
+            <Stat label="Duplicate generators" value={snap?.duplicateGenerators ?? 0} tone={snap?.duplicateGenerators ? "bad" : undefined} />
+            <Stat label="Generation queue" value={snap?.queueDepth ?? 0} />
+            <Stat label="Disabled modules" value={disabledModules.length} />
+            <Stat label="Requests blocked" value={fw.totalBlocked.toLocaleString()} />
+            <Stat label="Cache hit rate" value={`${dam.hitRate.toFixed(1)}%`} />
+            <Stat label="PostgREST requests" value={(fw.totalReads + fw.totalWrites).toLocaleString()} />
+            <Stat label="Product JSON files" value={snap?.productJsonCount ?? 0} />
+            <Stat label="Avg product response" value={`${guard.avgMs}ms`} />
+            <Stat label="DB reads prevented" value={requestsPrevented.toLocaleString()} tone="good" />
+          </div>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>
+              Last generated product:{" "}
+              <span className="font-mono">{snap?.lastProduct.slug ?? "—"}</span>
+              {snap?.lastProduct.at ? ` · ${new Date(snap.lastProduct.at).toLocaleString()}` : ""}
+            </div>
+            <div>
+              Disabled modules:{" "}
+              {disabledModules.length === 0
+                ? "none"
+                : disabledModules.map((m) => m.label).join(", ")}
+              {" "}— their tables receive zero reads/writes (blocked at the fetch boundary).
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+
       {/* Static engine snapshot */}
       <Card>
         <CardHeader>
