@@ -108,8 +108,18 @@ function record(evt: GuardEvent) {
   notify();
 }
 
+// Telemetry is OFF by default: writing every served path into `cdn_metrics`
+// is itself PostgREST traffic. Enable per-session from the admin panel with
+// `window.__P4NO_TELEMETRY__ = true` (or localStorage p4no_cdn_telemetry=1).
+function telemetryEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (typeof (window as any).__P4NO_TELEMETRY__ === 'boolean') return (window as any).__P4NO_TELEMETRY__;
+  try { return localStorage.getItem('p4no_cdn_telemetry') === '1'; } catch { return false; }
+}
+
 async function flushBeacon() {
   if (buffer.length === 0) return;
+  if (!telemetryEnabled()) { buffer.length = 0; return; }
   const batch = buffer.splice(0, BEACON_MAX_BATCH);
   try {
     await supabase.from('cdn_metrics').insert(
@@ -127,13 +137,15 @@ async function flushBeacon() {
 }
 
 if (typeof window !== 'undefined') {
-  setInterval(flushBeacon, BEACON_INTERVAL);
-  window.addEventListener('beforeunload', () => {
-    if (buffer.length === 0) return;
-    // Fire-and-forget on unload; ignore result.
-    void flushBeacon();
+  // No polling loop: flush only when the tab is being backgrounded/closed,
+  // and only when telemetry was explicitly enabled.
+  const maybeFlush = () => { if (buffer.length > 0) void flushBeacon(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') maybeFlush();
   });
+  window.addEventListener('pagehide', maybeFlush);
 }
+
 
 export function subscribeGuardStats(fn: () => void): () => void {
   listeners.add(fn);
