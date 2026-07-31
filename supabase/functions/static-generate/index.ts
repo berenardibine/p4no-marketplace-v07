@@ -14,6 +14,7 @@
 // Edge CDN only.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { isEntityAllowed, isFeatureEnabled } from "../_shared/featureGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -468,6 +469,14 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
   const removed: string[] = [];
   const isDelete = String(op ?? "").toUpperCase() === "DELETE";
 
+  // Static Generator Guard — never build JSON for a disabled module.
+  if (!(await isEntityAllowed(String(entity ?? "")))) {
+    return { paths: [], removed: [], skipped: true, reason: "feature_disabled" } as any;
+  }
+  const reelsOn = await isFeatureEnabled("reels_module");
+  const articlesOn = await isFeatureEnabled("articles_module");
+
+
   if (isDelete && (slug || id)) {
     const key = slug ?? id;
     switch (entity) {
@@ -544,14 +553,15 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
       paths.push(
         ...(await genProductLists()),
         ...(await genServices()),
-        ...(await genReels()),
-        ...(await genArticles()),
+        ...(reelsOn ? await genReels() : []),
+        ...(articlesOn ? await genArticles() : []),
         ...(await genCategories()),
         ...(await genFeeds()),
         ...(await genSearchIndex()),
         ...(await genHomepage()),
         ...(await genShops()),
       );
+
       break;
     default:
       throw new Error(`unknown entity: ${entity}`);

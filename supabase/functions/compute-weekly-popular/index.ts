@@ -1,5 +1,6 @@
 // Aggregates product activity into weekly_product_stats and pushes top list to Redis.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { guardFeature } from "../_shared/featureGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -36,6 +37,9 @@ async function redisSet(key: string, value: unknown, ttl: number) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  // Background Guard — Popular This Week is off: exit before any DB access.
+  const stop = await guardFeature("popular_this_week", corsHeaders);
+  if (stop) return stop;
   try {
     const { year, week } = isoWeek();
     const sinceIso = new Date(Date.now() - 7 * 86400000).toISOString();
