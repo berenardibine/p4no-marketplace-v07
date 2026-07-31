@@ -33,6 +33,7 @@ import {
 } from "@/lib/cdnGuard";
 import { getDataAccessStats } from "@/lib/dataAccess";
 import { getApiFirewallStats } from "@/lib/apiFirewall";
+import { FEATURE_REGISTRY, getFeatureState } from "@/lib/featureFlags";
 
 interface Snapshot {
   manifestVersion: number | null;
@@ -166,6 +167,12 @@ export default function AdminPerformanceCenter() {
 
   // Requests prevented (memory hits + dedupes + IndexedDB serves + CDN serves)
   const requestsPrevented = dam.saved + guard.browser + guard.cdn;
+
+  // Verification metrics
+  const pollingCount = (fw.polling?.length ?? 0) + (guard.polling?.length ?? 0);
+  const backgroundRequests = fw.polling.reduce((sum, p) => sum + p.perMin, 0);
+  const flagState = getFeatureState();
+  const disabledModules = FEATURE_REGISTRY.filter((f) => flagState[f.key] === false);
 
   // Rough egress saved: bytes not read from Supabase (avg row * hits)
   const bytesSaved =
@@ -325,7 +332,7 @@ export default function AdminPerformanceCenter() {
             <Stat label="PostgREST requests" value={(fw.totalReads + fw.totalWrites).toLocaleString()} />
             <Stat label="Product JSON files" value={snap?.productJsonCount ?? 0} />
             <Stat label="Avg product response" value={`${guard.avgMs}ms`} />
-            <Stat label="DB reads prevented" value={requestsPrevented.toLocaleString()} tone="good" />
+            <Stat label="DB reads prevented" value={requestsPrevented.toLocaleString()} />
           </div>
           <div className="text-xs text-muted-foreground space-y-1">
             <div>
