@@ -282,14 +282,27 @@ async function genProductCategory(category: string): Promise<string[]> {
   return [path];
 }
 
+// V3: every product gets its own JSON inside a hash-sharded folder
+// (products/<00..ff>/<slug>.json). The shard is derived from the same key the
+// URL exposes, so clients resolve the path locally with no lookup.
 async function genProductDetail(slugOrId: string): Promise<string[]> {
   if (!slugOrId) return [];
+  const started = Date.now();
   const { data } = await admin
     .from("products").select(PRODUCT_COLS)
     .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
   if (!data) return [];
-  const path = `product/${data.slug ?? data.id}`;
+  const key = data.slug ?? data.id;
+  const path = await productStaticPath(key);
   await stageJson(`${path}.json`, data, Date.now());
+  // Retire the pre-shard flat path so no duplicate JSON survives.
+  await unstage([`product/${key}.json`]);
+  try {
+    await admin.from("static_gen_log").insert({
+      entity: "product-detail", slug: key, paths: [path], ok: true,
+      duration_ms: Date.now() - started,
+    });
+  } catch { /* logging is best-effort */ }
   return [path];
 }
 
