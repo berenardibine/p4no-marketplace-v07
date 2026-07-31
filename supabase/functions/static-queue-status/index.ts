@@ -38,7 +38,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
     const url = new URL(req.url);
-    const path = url.searchParams.get("path") ?? "";
+    let path = url.searchParams.get("path") ?? "";
+    if (!path && req.method !== "GET") {
+      const body = await req.json().catch(() => null) as { path?: string } | null;
+      path = body?.path ?? "";
+    }
     if (!path) {
       return new Response(JSON.stringify({ ok: false, error: "path required" }), {
         status: 400,
