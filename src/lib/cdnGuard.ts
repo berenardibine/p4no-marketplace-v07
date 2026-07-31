@@ -192,8 +192,13 @@ export function markViolation(path: string, _note?: string) {
 // -------------------- Manifest-aware background refresh --------------------
 
 let lastManifestVersion = 0;
+let lastManifestCheck = 0;
+const MANIFEST_MIN_GAP_MS = 5 * 60_000;
 
 async function refreshManifestQuietly() {
+  const now = Date.now();
+  if (now - lastManifestCheck < MANIFEST_MIN_GAP_MS) return;
+  lastManifestCheck = now;
   const m = await getManifest(true);
   if (!m) return;
   if (m.version !== lastManifestVersion) {
@@ -202,10 +207,13 @@ async function refreshManifestQuietly() {
 }
 
 if (typeof window !== 'undefined') {
-  // Background refresh on focus + every 30s.
-  setInterval(refreshManifestQuietly, 30_000);
-  window.addEventListener('focus', refreshManifestQuietly);
+  // Event-driven only — no timers. The manifest is re-checked when the user
+  // returns to the tab, at most once every 5 minutes.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void refreshManifestQuietly();
+  });
 }
+
 
 // -------------------- Core fetcher --------------------
 
