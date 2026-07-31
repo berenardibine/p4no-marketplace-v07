@@ -552,14 +552,15 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
       paths.push(
         ...(await genProductLists()),
         ...(await genServices()),
-        ...(await genReels()),
-        ...(await genArticles()),
+        ...(reelsOn ? await genReels() : []),
+        ...(articlesOn ? await genArticles() : []),
         ...(await genCategories()),
         ...(await genFeeds()),
         ...(await genSearchIndex()),
         ...(await genHomepage()),
         ...(await genShops()),
       );
+
       break;
     default:
       throw new Error(`unknown entity: ${entity}`);
