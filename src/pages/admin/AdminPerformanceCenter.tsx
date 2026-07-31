@@ -79,11 +79,11 @@ export default function AdminPerformanceCenter() {
       setDam(getDataAccessStats());
       setFw(getApiFirewallStats());
     });
-    // Firewall stats are updated by fetch itself, not by guard events —
-    // poll cheaply from memory every 3s so the panel stays live.
-    const t = setInterval(() => setFw(getApiFirewallStats()), 3000);
-    return () => { unsub(); clearInterval(t); };
+    // No timers: firewall numbers are pulled on every guard event and on the
+    // manual Refresh button. A polling loop here would itself be background work.
+    return () => { unsub(); };
   }, []);
+
 
   const load = async () => {
     setLoading(true);
