@@ -42,6 +42,10 @@ interface Snapshot {
   queueProcessing: number;
   queueFailed: number;
   loopHits: number;
+  productJsonCount: number;
+  runningGenerators: number;
+  duplicateGenerators: number;
+  lastProduct: { slug: string | null; at: string | null };
   today: {
     filesGenerated: number;
     filesSkipped: number;
@@ -50,6 +54,7 @@ interface Snapshot {
     errors: number;
   };
 }
+
 
 function fmtBytes(n: number): string {
   if (!n) return "0 B";
