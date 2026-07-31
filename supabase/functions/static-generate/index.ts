@@ -14,6 +14,7 @@
 // Edge CDN only.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { isEntityAllowed, isFeatureEnabled } from "../_shared/featureGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

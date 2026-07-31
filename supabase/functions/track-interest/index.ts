@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { guardFeature } from '../_shared/featureGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,6 +19,9 @@ const WEIGHTS: Record<string, number> = {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  // Feature Guard — interest tracking is off: return before any DB access.
+  const stop = await guardFeature('recently_viewed', corsHeaders);
+  if (stop) return stop;
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: corsHeaders });

@@ -18,6 +18,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { planFromEvents, type ChangeEvent, type Entity } from "../_shared/depGraph.ts";
+import { isEntityAllowed } from "../_shared/featureGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -159,6 +160,8 @@ Deno.serve(async (req) => {
     for (const r of rows) {
       const ent = mapEntity(r.entity_type);
       if (!ent) { skipped++; continue; }
+      // Background Guard — disabled modules never reach the generator.
+      if (!(await isEntityAllowed(String(r.entity_type)))) { skipped++; continue; }
       events.push({
         entity: ent,
         id: r.entity_id || null,
