@@ -16,6 +16,7 @@
 import { STATIC_CDN, isStrictStaticMode } from './staticFlags';
 import { idbGet, idbPut, idbDelete, idbClear } from './idbCache';
 import { getManifest } from './staticCDN';
+import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 
 // Exponential backoff for self-heal retries after 404.
