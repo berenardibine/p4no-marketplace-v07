@@ -114,15 +114,18 @@ export default function AdminPerformanceCenter() {
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
-          supabase.from("generation_locks").select("key", { count: "exact" }).limit(50),
+          supabase.from("generation_locks").select("name,expires_at").limit(50),
         ]);
 
       const manifest = (manifestRes.data || []) as Array<{ version: number; size: number | null }>;
       const totalBytes = manifest.reduce((sum, m) => sum + (m.size || 0), 0);
       const version = manifest[0]?.version ?? null;
 
-      const lockRows = (locksRes.data || []) as Array<{ key: string }>;
-      const lockKeys = lockRows.map((l) => l.key);
+      const lockRows = (locksRes.data || []) as Array<{ name: string; expires_at: string }>;
+      const now = Date.now();
+      const lockKeys = lockRows
+        .filter((l) => new Date(l.expires_at).getTime() > now)
+        .map((l) => l.name.replace(/:[^:]*$/, ""));
       const duplicateGenerators = lockKeys.length - new Set(lockKeys).size;
 
       const daily = (dailyRes.data || {}) as any;
