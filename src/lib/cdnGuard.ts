@@ -16,6 +16,7 @@
 import { STATIC_CDN, isStrictStaticMode } from './staticFlags';
 import { idbGet, idbPut, idbDelete, idbClear } from './idbCache';
 import { getManifest } from './staticCDN';
+import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 
 // Exponential backoff for self-heal retries after 404.
@@ -108,8 +109,18 @@ function record(evt: GuardEvent) {
   notify();
 }
 
+// Telemetry is OFF by default: writing every served path into `cdn_metrics`
+// is itself PostgREST traffic. Enable per-session from the admin panel with
+// `window.__P4NO_TELEMETRY__ = true` (or localStorage p4no_cdn_telemetry=1).
+function telemetryEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (typeof (window as any).__P4NO_TELEMETRY__ === 'boolean') return (window as any).__P4NO_TELEMETRY__;
+  try { return localStorage.getItem('p4no_cdn_telemetry') === '1'; } catch { return false; }
+}
+
 async function flushBeacon() {
   if (buffer.length === 0) return;
+  if (!telemetryEnabled()) { buffer.length = 0; return; }
   const batch = buffer.splice(0, BEACON_MAX_BATCH);
   try {
     await supabase.from('cdn_metrics').insert(
@@ -127,13 +138,15 @@ async function flushBeacon() {
 }
 
 if (typeof window !== 'undefined') {
-  setInterval(flushBeacon, BEACON_INTERVAL);
-  window.addEventListener('beforeunload', () => {
-    if (buffer.length === 0) return;
-    // Fire-and-forget on unload; ignore result.
-    void flushBeacon();
+  // No polling loop: flush only when the tab is being backgrounded/closed,
+  // and only when telemetry was explicitly enabled.
+  const maybeFlush = () => { if (buffer.length > 0) void flushBeacon(); };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') maybeFlush();
   });
+  window.addEventListener('pagehide', maybeFlush);
 }
+
 
 export function subscribeGuardStats(fn: () => void): () => void {
   listeners.add(fn);
@@ -180,8 +193,13 @@ export function markViolation(path: string, _note?: string) {
 // -------------------- Manifest-aware background refresh --------------------
 
 let lastManifestVersion = 0;
+let lastManifestCheck = 0;
+const MANIFEST_MIN_GAP_MS = 5 * 60_000;
 
 async function refreshManifestQuietly() {
+  const now = Date.now();
+  if (now - lastManifestCheck < MANIFEST_MIN_GAP_MS) return;
+  lastManifestCheck = now;
   const m = await getManifest(true);
   if (!m) return;
   if (m.version !== lastManifestVersion) {
@@ -190,10 +208,13 @@ async function refreshManifestQuietly() {
 }
 
 if (typeof window !== 'undefined') {
-  // Background refresh on focus + every 30s.
-  setInterval(refreshManifestQuietly, 30_000);
-  window.addEventListener('focus', refreshManifestQuietly);
+  // Event-driven only — no timers. The manifest is re-checked when the user
+  // returns to the tab, at most once every 5 minutes.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void refreshManifestQuietly();
+  });
 }
+
 
 // -------------------- Core fetcher --------------------
 
@@ -246,10 +267,15 @@ export async function getContent<T = unknown>(
   path: string,
   opts: GetContentOptions<T> = {},
 ): Promise<T | null> {
+  // Feature guard: a disabled module fetches nothing at all — no CDN request,
+  // no IndexedDB read, no Supabase fallback.
+  if (!isStaticPathAllowed(path)) return null;
+
   if (!STATIC_CDN.base) {
     // No CDN configured — use fallback directly, mark as supabase.
     return runFallback(path, opts.fallback);
   }
+
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
   if (inFlight.has(key)) return inFlight.get(key) as Promise<T | null>;

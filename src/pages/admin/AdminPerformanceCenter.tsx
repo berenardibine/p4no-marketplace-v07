@@ -33,6 +33,7 @@ import {
 } from "@/lib/cdnGuard";
 import { getDataAccessStats } from "@/lib/dataAccess";
 import { getApiFirewallStats } from "@/lib/apiFirewall";
+import { FEATURE_REGISTRY, getFeatureState } from "@/lib/featureFlags";
 
 interface Snapshot {
   manifestVersion: number | null;
@@ -42,6 +43,10 @@ interface Snapshot {
   queueProcessing: number;
   queueFailed: number;
   loopHits: number;
+  productJsonCount: number;
+  runningGenerators: number;
+  duplicateGenerators: number;
+  lastProduct: { slug: string | null; at: string | null };
   today: {
     filesGenerated: number;
     filesSkipped: number;
@@ -50,6 +55,7 @@ interface Snapshot {
     errors: number;
   };
 }
+
 
 function fmtBytes(n: number): string {
   if (!n) return "0 B";
@@ -79,17 +85,17 @@ export default function AdminPerformanceCenter() {
       setDam(getDataAccessStats());
       setFw(getApiFirewallStats());
     });
-    // Firewall stats are updated by fetch itself, not by guard events —
-    // poll cheaply from memory every 3s so the panel stays live.
-    const t = setInterval(() => setFw(getApiFirewallStats()), 3000);
-    return () => { unsub(); clearInterval(t); };
+    // No timers: firewall numbers are pulled on every guard event and on the
+    // manual Refresh button. A polling loop here would itself be background work.
+    return () => { unsub(); };
   }, []);
+
 
   const load = async () => {
     setLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [manifestRes, queuedRes, processingRes, failedRes, loopRes, dailyRes] =
+      const [manifestRes, queuedRes, processingRes, failedRes, loopRes, dailyRes, productJsonRes, lastProductRes, locksRes] =
         await Promise.all([
           supabase
             .from("static_manifest")
@@ -101,13 +107,30 @@ export default function AdminPerformanceCenter() {
           supabase.from("generation_queue").select("id", { count: "exact", head: true }).eq("status", "failed"),
           supabase.from("loop_guard").select("count", { count: "exact", head: true }),
           supabase.from("generation_metrics_daily").select("*").eq("day", today).maybeSingle(),
+          supabase.from("static_manifest").select("path", { count: "exact", head: true }).like("path", "product/%"),
+          supabase
+            .from("static_gen_log")
+            .select("slug,created_at")
+            .eq("entity", "product")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from("generation_locks").select("name,expires_at").limit(50),
         ]);
 
       const manifest = (manifestRes.data || []) as Array<{ version: number; size: number | null }>;
       const totalBytes = manifest.reduce((sum, m) => sum + (m.size || 0), 0);
       const version = manifest[0]?.version ?? null;
 
+      const lockRows = (locksRes.data || []) as Array<{ name: string; expires_at: string }>;
+      const now = Date.now();
+      const lockKeys = lockRows
+        .filter((l) => new Date(l.expires_at).getTime() > now)
+        .map((l) => l.name.replace(/:[^:]*$/, ""));
+      const duplicateGenerators = lockKeys.length - new Set(lockKeys).size;
+
       const daily = (dailyRes.data || {}) as any;
+      const lastProd = (lastProductRes.data || null) as { slug: string | null; created_at: string | null } | null;
       setSnap({
         manifestVersion: version,
         manifestSize: manifestRes.count ?? manifest.length,
@@ -116,6 +139,10 @@ export default function AdminPerformanceCenter() {
         queueProcessing: processingRes.count ?? 0,
         queueFailed: failedRes.count ?? 0,
         loopHits: loopRes.count ?? 0,
+        productJsonCount: productJsonRes.count ?? 0,
+        runningGenerators: lockKeys.length,
+        duplicateGenerators,
+        lastProduct: { slug: lastProd?.slug ?? null, at: lastProd?.created_at ?? null },
         today: {
           filesGenerated: daily.files_generated ?? 0,
           filesSkipped: daily.files_skipped ?? 0,
@@ -124,6 +151,7 @@ export default function AdminPerformanceCenter() {
           errors: daily.errors ?? 0,
         },
       });
+
     } finally {
       setLoading(false);
     }
@@ -139,6 +167,12 @@ export default function AdminPerformanceCenter() {
 
   // Requests prevented (memory hits + dedupes + IndexedDB serves + CDN serves)
   const requestsPrevented = dam.saved + guard.browser + guard.cdn;
+
+  // Verification metrics
+  const pollingCount = (fw.polling?.length ?? 0) + (guard.polling?.length ?? 0);
+  const backgroundRequests = fw.polling.reduce((sum, p) => sum + p.perMin, 0);
+  const flagState = getFeatureState();
+  const disabledModules = FEATURE_REGISTRY.filter((f) => flagState[f.key] === false);
 
   // Rough egress saved: bytes not read from Supabase (avg row * hits)
   const bytesSaved =
@@ -277,6 +311,46 @@ export default function AdminPerformanceCenter() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Zero-DB verification */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4" /> Zero-DB verification
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <Stat label="Background requests" value={backgroundRequests} tone={backgroundRequests ? "warn" : undefined} />
+            <Stat label="Polling loops" value={pollingCount} tone={pollingCount ? "bad" : undefined} />
+            <Stat label="Running generators" value={snap?.runningGenerators ?? 0} />
+            <Stat label="Duplicate generators" value={snap?.duplicateGenerators ?? 0} tone={snap?.duplicateGenerators ? "bad" : undefined} />
+            <Stat label="Generation queue" value={snap?.queueDepth ?? 0} />
+            <Stat label="Disabled modules" value={disabledModules.length} />
+            <Stat label="Requests blocked" value={fw.totalBlocked.toLocaleString()} />
+            <Stat label="Cache hit rate" value={`${dam.hitRate.toFixed(1)}%`} />
+            <Stat label="PostgREST requests" value={(fw.totalReads + fw.totalWrites).toLocaleString()} />
+            <Stat label="Product JSON files" value={snap?.productJsonCount ?? 0} />
+            <Stat label="Avg product response" value={`${guard.avgMs}ms`} />
+            <Stat label="DB reads prevented" value={requestsPrevented.toLocaleString()} />
+          </div>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <div>
+              Last generated product:{" "}
+              <span className="font-mono">{snap?.lastProduct.slug ?? "—"}</span>
+              {snap?.lastProduct.at ? ` · ${new Date(snap.lastProduct.at).toLocaleString()}` : ""}
+            </div>
+            <div>
+              Disabled modules:{" "}
+              {disabledModules.length === 0
+                ? "none"
+                : disabledModules.map((m) => m.label).join(", ")}
+              {" "}— their tables receive zero reads/writes (blocked at the fetch boundary).
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
 
       {/* Static engine snapshot */}
       <Card>

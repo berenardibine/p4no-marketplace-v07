@@ -14,7 +14,7 @@
 // Edge CDN only.
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
-import { isEntityAllowed, isFeatureEnabled } from "../_shared/featureGuard.ts";
+import { isEntityAllowed, isFeatureEnabled, isStaticPathAllowed } from "../_shared/featureGuard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,6 +80,11 @@ const runStats = { written: 0, skipped: 0, bytesWritten: 0, bytesSaved: 0 };
 // static_manifest we skip the upload + registry write entirely — this is the
 // core of "no unnecessary writes".
 async function stageJson(path: string, data: unknown, version: number): Promise<string> {
+  // Feature guard: never write JSON that belongs to a disabled module.
+  if (!(await isStaticPathAllowed(path))) {
+    runStats.skipped += 1;
+    return path;
+  }
   const dataJson = JSON.stringify(data);
   const contentHash = await sha256(dataJson);
 
@@ -250,7 +255,16 @@ async function genProductLists(): Promise<string[]> {
     });
     return acc;
   }, []);
+  // Compact index of every active product (card-level fields only) so the
+  // client can render lists/search without ever touching PostgREST.
+  const all = await fetchProducts((q) => q.order("created_at", { ascending: false }), 1000);
   const paths = [
+    await stageJson("products/all.json", all.map((p: any) => ({
+      id: p.id, slug: p.slug, title: p.title, price: p.price,
+      currency_symbol: p.currency_symbol, category: p.category,
+      images: Array.isArray(p.images) ? p.images.slice(0, 1) : [],
+      views: p.views, likes: p.likes, created_at: p.created_at,
+    })), v),
     await stageJson("products/latest.json", latest, v),
     await stageJson("products/featured.json", featured, v),
     await stageJson("products/popular.json", popular, v),
@@ -581,10 +595,50 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
   return { paths, removed, deployment, stats: { ...runStats } };
 }
 
+// --------------- Single-flight lock ---------------
+// Only ONE generation process may run at a time. A second caller does not
+// duplicate the work: it enqueues the request and returns immediately.
+const LOCK_NAME = "static-generate";
+const LOCK_TTL_MS = 120_000;
+
+async function acquireLock(holder: string): Promise<boolean> {
+  const now = new Date();
+  // Clear any expired lock first (crashed run).
+  await admin.from("generation_locks").delete().lt("expires_at", now.toISOString());
+  const { error } = await admin.from("generation_locks").insert({
+    name: LOCK_NAME,
+    holder,
+    acquired_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + LOCK_TTL_MS).toISOString(),
+  });
+  return !error;
+}
+
+async function releaseLock(): Promise<void> {
+  await admin.from("generation_locks").delete().eq("name", LOCK_NAME);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  let locked = false;
   try {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const holder = `${body?.entity ?? "unknown"}:${body?.slug ?? body?.id ?? "-"}`;
+    locked = await acquireLock(holder);
+    if (!locked) {
+      // Another generator is running — queue this change instead of racing it.
+      try {
+        await admin.rpc("enqueue_generation", {
+          _entity_type: String(body?.entity ?? "all"),
+          _entity_id: String(body?.slug ?? body?.id ?? ""),
+          _action: String(body?.op ?? "upsert"),
+        });
+      } catch { /* ignore */ }
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, reason: "generator_busy", queued: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     const result = await handle(body);
     return new Response(JSON.stringify({ ok: true, ...result }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -598,5 +652,7 @@ Deno.serve(async (req) => {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } finally {
+    if (locked) await releaseLock();
   }
 });

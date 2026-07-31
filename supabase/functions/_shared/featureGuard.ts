@@ -92,14 +92,17 @@ export async function isEntityAllowed(entity: string): Promise<boolean> {
 
 /** Static path prefixes that must never be generated while a module is off. */
 const FEATURE_STATIC_PATHS: Record<string, string[]> = {
-  reels_module: ["reels/"],
-  articles_module: ["articles/", "insights/"],
-  categories_section: [],
+  reels_module: ["reels/", "reel/"],
+  articles_module: ["articles/", "insights/", "article/"],
+  categories_section: ["categories/"],
   new_arrivals: ["feeds/new-arrivals"],
   best_deals: ["feeds/best-deals"],
-  popular_this_week: ["products/popular", "services/popular"],
-  homepage_shop_section: [],
+  popular_this_week: ["products/popular", "services/popular", "feeds/popular"],
+  recently_viewed: ["feeds/recently-viewed", "recommendations/"],
+  homepage_shop_section: ["shops/all"],
+  mark_order_system: [],
 };
+
 
 export async function isStaticPathAllowed(path: string): Promise<boolean> {
   const flags = await getFeatureFlags();

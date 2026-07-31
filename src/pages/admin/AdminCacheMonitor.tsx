@@ -229,10 +229,9 @@ export default function AdminCacheMonitor() {
   }, [loadManifest, loadLogs, loadMetrics, loadDbCounts, loadStorage]);
   useEffect(() => { if (manifest) loadBlobFiles(manifest); }, [manifest, loadBlobFiles]);
 
-  useEffect(() => {
-    const t = setInterval(() => { loadLogs(); loadMetrics(); loadStorage(); }, 15000);
-    return () => clearInterval(t);
-  }, [loadLogs, loadMetrics, loadStorage]);
+  // No auto-refresh timer: this admin page previously polled the database every
+  // 15s per open tab. Data now refreshes on mount and via the Refresh button.
+
 
   // ---- Actions ----
   const runAction = useCallback(async (label: string, fn: () => Promise<any>) => {
