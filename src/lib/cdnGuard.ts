@@ -266,10 +266,15 @@ export async function getContent<T = unknown>(
   path: string,
   opts: GetContentOptions<T> = {},
 ): Promise<T | null> {
+  // Feature guard: a disabled module fetches nothing at all — no CDN request,
+  // no IndexedDB read, no Supabase fallback.
+  if (!isStaticPathAllowed(path)) return null;
+
   if (!STATIC_CDN.base) {
     // No CDN configured — use fallback directly, mark as supabase.
     return runFallback(path, opts.fallback);
   }
+
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
   if (inFlight.has(key)) return inFlight.get(key) as Promise<T | null>;
