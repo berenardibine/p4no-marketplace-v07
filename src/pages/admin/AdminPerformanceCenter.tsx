@@ -94,7 +94,7 @@ export default function AdminPerformanceCenter() {
     setLoading(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
-      const [manifestRes, queuedRes, processingRes, failedRes, loopRes, dailyRes] =
+      const [manifestRes, queuedRes, processingRes, failedRes, loopRes, dailyRes, productJsonRes, lastProductRes, locksRes] =
         await Promise.all([
           supabase
             .from("static_manifest")
@@ -106,13 +106,27 @@ export default function AdminPerformanceCenter() {
           supabase.from("generation_queue").select("id", { count: "exact", head: true }).eq("status", "failed"),
           supabase.from("loop_guard").select("count", { count: "exact", head: true }),
           supabase.from("generation_metrics_daily").select("*").eq("day", today).maybeSingle(),
+          supabase.from("static_manifest").select("path", { count: "exact", head: true }).like("path", "product/%"),
+          supabase
+            .from("static_gen_log")
+            .select("slug,created_at")
+            .eq("entity", "product")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from("generation_locks").select("key", { count: "exact" }).limit(50),
         ]);
 
       const manifest = (manifestRes.data || []) as Array<{ version: number; size: number | null }>;
       const totalBytes = manifest.reduce((sum, m) => sum + (m.size || 0), 0);
       const version = manifest[0]?.version ?? null;
 
+      const lockRows = (locksRes.data || []) as Array<{ key: string }>;
+      const lockKeys = lockRows.map((l) => l.key);
+      const duplicateGenerators = lockKeys.length - new Set(lockKeys).size;
+
       const daily = (dailyRes.data || {}) as any;
+      const lastProd = (lastProductRes.data || null) as { slug: string | null; created_at: string | null } | null;
       setSnap({
         manifestVersion: version,
         manifestSize: manifestRes.count ?? manifest.length,
@@ -121,6 +135,10 @@ export default function AdminPerformanceCenter() {
         queueProcessing: processingRes.count ?? 0,
         queueFailed: failedRes.count ?? 0,
         loopHits: loopRes.count ?? 0,
+        productJsonCount: productJsonRes.count ?? 0,
+        runningGenerators: lockKeys.length,
+        duplicateGenerators,
+        lastProduct: { slug: lastProd?.slug ?? null, at: lastProd?.created_at ?? null },
         today: {
           filesGenerated: daily.files_generated ?? 0,
           filesSkipped: daily.files_skipped ?? 0,
@@ -129,6 +147,7 @@ export default function AdminPerformanceCenter() {
           errors: daily.errors ?? 0,
         },
       });
+
     } finally {
       setLoading(false);
     }
