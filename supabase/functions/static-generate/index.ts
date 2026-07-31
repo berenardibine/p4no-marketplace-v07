@@ -468,6 +468,14 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
   const removed: string[] = [];
   const isDelete = String(op ?? "").toUpperCase() === "DELETE";
 
+  // Static Generator Guard — never build JSON for a disabled module.
+  if (!(await isEntityAllowed(String(entity ?? "")))) {
+    return { paths: [], removed: [], skipped: true, reason: "feature_disabled" } as any;
+  }
+  const reelsOn = await isFeatureEnabled("reels_module");
+  const articlesOn = await isFeatureEnabled("articles_module");
+
+
   if (isDelete && (slug || id)) {
     const key = slug ?? id;
     switch (entity) {
