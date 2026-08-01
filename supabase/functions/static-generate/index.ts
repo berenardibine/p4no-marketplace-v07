@@ -79,7 +79,10 @@ const runStats = { written: 0, skipped: 0, bytesWritten: 0, bytesSaved: 0 };
 // timestamp changes every call). If the hash matches the last recorded value in
 // static_manifest we skip the upload + registry write entirely — this is the
 // core of "no unnecessary writes".
-async function stageJson(path: string, data: unknown, version: number): Promise<string> {
+interface StageMeta { entity?: string; entityId?: string | null; shard?: string | null }
+
+async function stageJson(path: string, data: unknown, version: number, meta?: StageMeta): Promise<string> {
+  const startedAt = Date.now();
   // Feature guard: never write JSON that belongs to a disabled module.
   if (!(await isStaticPathAllowed(path))) {
     runStats.skipped += 1;
