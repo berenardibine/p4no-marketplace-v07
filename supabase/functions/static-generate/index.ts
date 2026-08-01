@@ -521,7 +521,10 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
     const key = slug ?? id;
     switch (entity) {
       case "product":
-      case "reel": removed.push(`product/${key}`); break;
+      case "reel":
+        // Sharded detail file + the legacy flat path (belt & braces).
+        removed.push(await productStaticPath(key), `product/${key}`);
+        break;
       case "service": removed.push(`service/${key}`); break;
       case "article": removed.push(`article/${key}`); break;
       case "shop": removed.push(`shops/${key}`); break;
