@@ -59,7 +59,7 @@ export default function AdminProductStatic() {
         .order("generated_at", { ascending: false })
         .limit(5000),
       supabase.from("cdn_metrics").select("source,violation").order("created_at", { ascending: false }).limit(2000),
-      supabase.from("generation_queue").select("id", { count: "exact", head: true }).eq("status", "queued"),
+      supabase.from("generation_queue").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("static_gen_log").select("id", { count: "exact", head: true }).eq("ok", false).gte("created_at", since),
       supabase.from("generation_locks").select("name,holder"),
     ]);
