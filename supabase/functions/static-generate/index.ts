@@ -15,6 +15,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { isEntityAllowed, isFeatureEnabled, isStaticPathAllowed } from "../_shared/featureGuard.ts";
+import { productStaticPath, shardOf } from "../_shared/shard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -302,7 +303,11 @@ async function genProductDetail(slugOrId: string): Promise<string[]> {
   if (!data) return [];
   const key = data.slug ?? data.id;
   const path = await productStaticPath(key);
-  await stageJson(`${path}.json`, data, Date.now());
+  await stageJson(`${path}.json`, data, Date.now(), {
+    entity: "product",
+    entityId: data.id,
+    shard: await shardOf(key),
+  });
   // Retire the pre-shard flat path so no duplicate JSON survives.
   await unstage([`product/${key}.json`]);
   try {
