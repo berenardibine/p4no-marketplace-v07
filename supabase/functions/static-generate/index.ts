@@ -129,6 +129,11 @@ async function stageJson(path: string, data: unknown, version: number): Promise<
     hash: contentHash,
     size,
     generated_at: new Date().toISOString(),
+    entity: meta?.entity ?? null,
+    entity_id: meta?.entityId ?? null,
+    shard: meta?.shard ?? null,
+    status: "ok",
+    duration_ms: Date.now() - startedAt,
   });
 
   runStats.written += 1;
