@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
   let locked = false;
   const startedAll = Date.now();
   try {
-    if (!(await isFeatureEnabled("products_module", true))) {
+    if (!(await isFeatureEnabled("products_module"))) {
       return new Response(JSON.stringify({ ok: true, skipped: true, reason: "feature_disabled" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
