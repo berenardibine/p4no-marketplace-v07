@@ -5,6 +5,7 @@
 // See src/lib/cdnGuard.ts for the layered fetcher.
 
 import { getContent, markViolation } from './cdnGuard';
+import { productStaticPath } from './productShard';
 
 function pageSlice<T>(rows: T[] | null | undefined, page: number, pageSize: number, path: string): T[] | null {
   if (!Array.isArray(rows)) {
@@ -58,6 +59,8 @@ export const getCachedReels = async (
 };
 
 export const getCachedReelDetail = async (slugOrId: string) => {
+  const sharded = await getContent<any>(await productStaticPath(slugOrId));
+  if (sharded) return sharded;
   return getContent<any>(`product/${slugOrId}`);
 };
 

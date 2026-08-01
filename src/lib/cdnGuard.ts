@@ -237,6 +237,9 @@ async function tryRegenerate(entity: string, slug?: string) {
 function entityFromPath(path: string): { entity: string; slug?: string } | null {
   const p = path.replace(/^\/+/, '').replace(/\.json$/, '');
   if (p.startsWith('products/') || p === 'products' || p.startsWith('product/')) {
+    // V3 sharded detail: products/<shard>/<slug>
+    const sharded = p.match(/^products\/[0-9a-f]{2}\/(.+)$/);
+    if (sharded) return { entity: 'product', slug: sharded[1] };
     if (p.startsWith('product/')) return { entity: 'product', slug: p.slice('product/'.length) };
     return { entity: 'product' };
   }
