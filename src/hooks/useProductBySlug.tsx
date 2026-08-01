@@ -5,6 +5,7 @@ import { getCachedProductDetail } from '@/lib/productCache';
 import { REDIS_ONLY } from '@/lib/cacheFlags';
 import { waitForPath } from '@/lib/staticCDN';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { productStaticPath } from '@/lib/productShard';
 
 
 export const useProductBySlug = (slugOrId: string | undefined) => {
@@ -52,7 +53,7 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
       // this path is being built right now. If so, wait for the manifest bump
       // and retry the static read — no PostgREST touch.
       try {
-        const built = await waitForPath(`product/${slugOrId}`);
+        const built = await waitForPath(await productStaticPath(slugOrId));
         if (built) {
           const retry = await getCachedProductDetail(slugOrId);
           if (retry) {

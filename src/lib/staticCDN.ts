@@ -78,6 +78,8 @@ export async function getManifest(force = false): Promise<Manifest | null> {
 
 function entityFromPath(path: string): { entity: string; slug?: string; category?: string } | null {
   const p = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const shardedProduct = p.match(/^products\/[0-9a-f]{2}\/(.+)$/);
+  if (shardedProduct) return { entity: 'product', slug: shardedProduct[1] };
   if (p.startsWith('product/')) return { entity: 'product', slug: p.slice('product/'.length) };
   if (p.startsWith('service/')) return { entity: 'service', slug: p.slice('service/'.length) };
   if (p.startsWith('article/')) return { entity: 'article', slug: p.slice('article/'.length) };

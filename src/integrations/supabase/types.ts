@@ -4886,6 +4886,7 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          duration_ms: number | null
           entity: string
           error: string | null
           id: number
@@ -4897,6 +4898,7 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          duration_ms?: number | null
           entity: string
           error?: string | null
           id?: number
@@ -4908,6 +4910,7 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          duration_ms?: number | null
           entity?: string
           error?: string | null
           id?: number
@@ -4920,24 +4923,42 @@ export type Database = {
       }
       static_manifest: {
         Row: {
+          created_at: string
+          duration_ms: number | null
+          entity: string | null
+          entity_id: string | null
           generated_at: string
           hash: string
           path: string
+          shard: string | null
           size: number
+          status: string
           version: number
         }
         Insert: {
+          created_at?: string
+          duration_ms?: number | null
+          entity?: string | null
+          entity_id?: string | null
           generated_at?: string
           hash: string
           path: string
+          shard?: string | null
           size?: number
+          status?: string
           version: number
         }
         Update: {
+          created_at?: string
+          duration_ms?: number | null
+          entity?: string | null
+          entity_id?: string | null
           generated_at?: string
           hash?: string
           path?: string
+          shard?: string | null
           size?: number
+          status?: string
           version?: number
         }
         Relationships: []

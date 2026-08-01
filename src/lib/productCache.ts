@@ -6,6 +6,7 @@
 // See src/lib/cdnGuard.ts for the layered fetcher.
 
 import { getContent, markViolation } from './cdnGuard';
+import { productStaticPath } from './productShard';
 
 export type ListKind = 'latest' | 'featured' | 'popular' | 'discounted' | 'trending' | 'popular-week';
 
@@ -39,7 +40,15 @@ export async function getCachedCategory(slug: string, page = 0, pageSize = 100) 
   return pageSlice(rows, page, pageSize, path);
 }
 
+/**
+ * V3 sharded product detail: products/<shard>/<slug>.json.
+ * The shard is computed locally from the slug, so there is no lookup and no
+ * database read. Falls back once to the legacy flat path for files that have
+ * not been migrated yet.
+ */
 export async function getCachedProductDetail(slug: string) {
+  const sharded = await getContent<any>(await productStaticPath(slug));
+  if (sharded) return sharded;
   return getContent<any>(`product/${slug}`);
 }
 

@@ -15,6 +15,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { isEntityAllowed, isFeatureEnabled, isStaticPathAllowed } from "../_shared/featureGuard.ts";
+import { productStaticPath, shardOf } from "../_shared/shard.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -79,7 +80,10 @@ const runStats = { written: 0, skipped: 0, bytesWritten: 0, bytesSaved: 0 };
 // timestamp changes every call). If the hash matches the last recorded value in
 // static_manifest we skip the upload + registry write entirely — this is the
 // core of "no unnecessary writes".
-async function stageJson(path: string, data: unknown, version: number): Promise<string> {
+interface StageMeta { entity?: string; entityId?: string | null; shard?: string | null }
+
+async function stageJson(path: string, data: unknown, version: number, meta?: StageMeta): Promise<string> {
+  const startedAt = Date.now();
   // Feature guard: never write JSON that belongs to a disabled module.
   if (!(await isStaticPathAllowed(path))) {
     runStats.skipped += 1;
@@ -129,6 +133,11 @@ async function stageJson(path: string, data: unknown, version: number): Promise<
     hash: contentHash,
     size,
     generated_at: new Date().toISOString(),
+    entity: meta?.entity ?? null,
+    entity_id: meta?.entityId ?? null,
+    shard: meta?.shard ?? null,
+    status: "ok",
+    duration_ms: Date.now() - startedAt,
   });
 
   runStats.written += 1;
@@ -294,7 +303,11 @@ async function genProductDetail(slugOrId: string): Promise<string[]> {
   if (!data) return [];
   const key = data.slug ?? data.id;
   const path = await productStaticPath(key);
-  await stageJson(`${path}.json`, data, Date.now());
+  await stageJson(`${path}.json`, data, Date.now(), {
+    entity: "product",
+    entityId: data.id,
+    shard: await shardOf(key),
+  });
   // Retire the pre-shard flat path so no duplicate JSON survives.
   await unstage([`product/${key}.json`]);
   try {
@@ -508,7 +521,10 @@ async function handle(body: any): Promise<{ paths: string[]; removed: string[]; 
     const key = slug ?? id;
     switch (entity) {
       case "product":
-      case "reel": removed.push(`product/${key}`); break;
+      case "reel":
+        // Sharded detail file + the legacy flat path (belt & braces).
+        removed.push(await productStaticPath(key), `product/${key}`);
+        break;
       case "service": removed.push(`service/${key}`); break;
       case "article": removed.push(`article/${key}`); break;
       case "shop": removed.push(`shops/${key}`); break;
