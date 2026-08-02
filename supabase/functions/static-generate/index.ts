@@ -102,11 +102,7 @@ async function stageJson(path: string, data: unknown, version: number, meta?: St
   if (prev?.hash === contentHash) {
     runStats.skipped += 1;
     runStats.bytesSaved += prev.size ?? dataJson.length;
-    // Bump generated_at so consumers know we saw it, but do NOT re-upload.
-    await admin
-      .from("static_manifest")
-      .update({ generated_at: new Date().toISOString() })
-      .eq("path", manifestKey);
+    // Content unchanged → NO writes at all (no re-upload, no manifest touch).
     return path;
   }
 
