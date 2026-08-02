@@ -226,7 +226,15 @@ function cdnUrl(path: string): string {
   return `${STATIC_CDN.base}/${clean}.json`;
 }
 
+// Visitor traffic must never start a generation run. Regeneration happens only
+// from content mutations (DB triggers → static-worker) or explicit admin action.
+function selfHealEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (window as unknown as { __P4NO_SELFHEAL__?: boolean }).__P4NO_SELFHEAL__ === true;
+}
+
 async function tryRegenerate(entity: string, slug?: string) {
+  if (!selfHealEnabled()) return;
   try {
     await supabase.functions.invoke('static-generate', {
       body: slug ? { entity, slug } : { entity },
