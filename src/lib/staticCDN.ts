@@ -97,7 +97,15 @@ function entityFromPath(path: string): { entity: string; slug?: string; category
   return null;
 }
 
+// Visitors must NEVER trigger generation. Self-heal is admin-only and opt-in
+// (window.__P4NO_SELFHEAL__ = true), so a missing file costs zero DB work.
+function selfHealEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (window as unknown as { __P4NO_SELFHEAL__?: boolean }).__P4NO_SELFHEAL__ === true;
+}
+
 async function selfHeal(path: string): Promise<boolean> {
+  if (!selfHealEnabled()) return false;
   if (healedThisSession.has(path)) return false;
   healedThisSession.add(path);
   const target = entityFromPath(path);

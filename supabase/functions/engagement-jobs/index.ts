@@ -3,6 +3,7 @@
 //   hourly  : ?job=price-drop, ?job=back-in-stock, ?job=trending-product
 //   daily   : ?job=abandoned-favorites, ?job=viewed-still-available, ?job=lifecycle, ?job=recommendations
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { isFeatureEnabled } from '../_shared/featureGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -268,6 +269,15 @@ const JOBS: Record<string, () => Promise<number>> = {
   'recommendations': jobRecommendations,
 };
 
+// Jobs whose data source belongs to a toggleable module. When the module is
+// disabled the job must not touch the database at all (not even cron state).
+const JOB_FEATURE: Record<string, string> = {
+  'trending-product': 'popular_this_week',
+  'abandoned-favorites': 'recently_viewed',
+  'viewed-still-available': 'recently_viewed',
+  'recommendations': 'recently_viewed',
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   const url = new URL(req.url);
@@ -279,6 +289,11 @@ Deno.serve(async (req) => {
     const fn = JOBS[name];
     if (!fn) {
       results[name] = 'unknown_job';
+      continue;
+    }
+    const feature = JOB_FEATURE[name];
+    if (feature && !(await isFeatureEnabled(feature))) {
+      results[name] = 'feature_disabled';
       continue;
     }
     try {
