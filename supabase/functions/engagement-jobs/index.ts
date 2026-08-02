@@ -3,6 +3,7 @@
 //   hourly  : ?job=price-drop, ?job=back-in-stock, ?job=trending-product
 //   daily   : ?job=abandoned-favorites, ?job=viewed-still-available, ?job=lifecycle, ?job=recommendations
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { isFeatureEnabled } from '../_shared/featureGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
