@@ -224,13 +224,16 @@ export default function AdminCacheMonitor() {
     setBlobLoading(false);
   }, []);
 
+  // Mount does the cheapest possible work: manifest comes from the CDN (no DB),
+  // storage estimate is browser-local. Heavy database reads (cdn_metrics,
+  // static_gen_log, row counts, blob HEAD sweeps) run only on explicit Refresh.
   useEffect(() => {
-    loadManifest(); loadLogs(); loadMetrics(); loadDbCounts(); loadStorage();
-  }, [loadManifest, loadLogs, loadMetrics, loadDbCounts, loadStorage]);
-  useEffect(() => { if (manifest) loadBlobFiles(manifest); }, [manifest, loadBlobFiles]);
+    loadManifest(); loadStorage();
+  }, [loadManifest, loadStorage]);
 
-  // No auto-refresh timer: this admin page previously polled the database every
-  // 15s per open tab. Data now refreshes on mount and via the Refresh button.
+  // No auto-refresh timer and no on-mount DB reads: this admin page previously
+  // polled the database every 15s per open tab.
+
 
 
   // ---- Actions ----
