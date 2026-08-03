@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
+import InfrastructureAudit from "@/components/admin/InfrastructureAudit";
+import SupabaseLogsPanel from "@/components/admin/SupabaseLogsPanel";
 import {
   Activity, Database, Cloud, RefreshCw, Zap, HardDrive, Clock,
   CheckCircle2, AlertTriangle, XCircle, Download, FileJson, Play,
@@ -625,7 +627,16 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="manifest">Manifest</TabsTrigger>
           <TabsTrigger value="controls">Controls</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="infra"><Server className="h-3.5 w-3.5 mr-1" />Infrastructure Audit</TabsTrigger>
+          <TabsTrigger value="sblogs"><Database className="h-3.5 w-3.5 mr-1" />Supabase Logs</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="infra" className="mt-4">
+          <InfrastructureAudit />
+        </TabsContent>
+        <TabsContent value="sblogs" className="mt-4">
+          <SupabaseLogsPanel />
+        </TabsContent>
 
         {/* --- Traffic --- */}
         <TabsContent value="traffic" className="mt-4 space-y-4">
