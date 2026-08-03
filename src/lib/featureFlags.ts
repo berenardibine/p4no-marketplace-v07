@@ -24,7 +24,10 @@ export type FeatureKey =
   | 'best_deals'
   | 'popular_this_week'
   | 'mark_order_system'
-  | 'homepage_shop_section';
+  | 'homepage_shop_section'
+  | 'recommendations'
+  | 'weekly_digest'
+  | 'trending_engine';
 
 export interface FeatureMeta {
   key: FeatureKey | string;

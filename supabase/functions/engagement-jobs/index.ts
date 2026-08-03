@@ -272,10 +272,12 @@ const JOBS: Record<string, () => Promise<number>> = {
 // Jobs whose data source belongs to a toggleable module. When the module is
 // disabled the job must not touch the database at all (not even cron state).
 const JOB_FEATURE: Record<string, string> = {
-  'trending-product': 'popular_this_week',
+  'trending-product': 'trending_engine',
+  'back-in-stock': 'trending_engine',
   'abandoned-favorites': 'recently_viewed',
   'viewed-still-available': 'recently_viewed',
-  'recommendations': 'recently_viewed',
+  'recommendations': 'recommendations',
+  'lifecycle': 'mark_order_system',
 };
 
 Deno.serve(async (req) => {

@@ -10,6 +10,7 @@
 // Uses notification_logs to ensure no more than 1 reengagement push per user
 // every 4 days.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { guardFeature } from '../_shared/featureGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -77,6 +78,9 @@ function pickCopy(daysSince: number, product: any, article: any) {
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  // Background Guard — no reads at all while the trending/engagement engine is off.
+  const stop = await guardFeature('trending_engine', corsHeaders);
+  if (stop) return stop;
 
   const now = Date.now();
   const threeDaysAgo = new Date(now - 3 * 24 * 3600 * 1000).toISOString();

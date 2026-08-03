@@ -1,6 +1,7 @@
 // Weekly digest — buyer + seller summary notification.
 // Triggered by pg_cron every Monday 09:00 UTC.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
+import { guardFeature } from '../_shared/featureGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,6 +36,9 @@ async function dispatchPush(userId: string, title: string, body: string, url: st
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  // Background Guard — exits before any database access when the module is off.
+  const stop = await guardFeature('weekly_digest', corsHeaders);
+  if (stop) return stop;
 
   const weekStart = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 

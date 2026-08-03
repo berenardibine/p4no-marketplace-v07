@@ -22,6 +22,8 @@ interface ProductLite {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   // Background Guard — the recommendation engine depends on interest tracking.
+  const stopEngine = await guardFeature('recommendations', corsHeaders);
+  if (stopEngine) return stopEngine;
   const stop = await guardFeature('recently_viewed', corsHeaders);
   if (stop) return stop;
 
