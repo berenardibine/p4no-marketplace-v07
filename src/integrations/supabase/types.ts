@@ -6201,6 +6201,7 @@ export type Database = {
         Args: { p_item_id: string; p_item_type: string }
         Returns: undefined
       }
+      infra_audit_cron: { Args: never; Returns: Json }
       longtransactionsenabled: { Args: never; Returns: boolean }
       mark_notification_clicked: {
         Args: { _notification_id: string }
