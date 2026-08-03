@@ -24,7 +24,10 @@ export type FeatureKey =
   | 'best_deals'
   | 'popular_this_week'
   | 'mark_order_system'
-  | 'homepage_shop_section';
+  | 'homepage_shop_section'
+  | 'recommendations'
+  | 'weekly_digest'
+  | 'trending_engine';
 
 export interface FeatureMeta {
   key: FeatureKey | string;
@@ -172,6 +175,48 @@ export const FEATURE_REGISTRY: FeatureMeta[] = [
     estEgressSavings: '~45 KB / visit',
     egressKbPerVisit: 45,
     readsPerVisit: 2,
+  },
+  {
+    key: 'recommendations',
+    label: 'Recommendation Engine',
+    description: 'Recommendation index builder, personalised nudges and its cron job.',
+    category: 'module',
+    dependencies: ['products'],
+    staticPaths: ['recommendations/'],
+    tables: ['recommendation_index', 'recommendation_events', 'user_interest_profiles'],
+    jobs: ['generate-recommendations', 'engagement-jobs:recommendations'],
+    estDbSavings: '~200 reads / run',
+    estEgressSavings: '~5 MB / day',
+    egressKbPerVisit: 0,
+    readsPerVisit: 0,
+  },
+  {
+    key: 'weekly_digest',
+    label: 'Weekly Digest',
+    description: 'Weekly buyer/seller summary emails and push notifications.',
+    category: 'module',
+    dependencies: [],
+    staticPaths: [],
+    tables: ['seller_weekly_reports'],
+    jobs: ['weekly-digest'],
+    estDbSavings: '~500 reads / run',
+    estEgressSavings: '~2 MB / week',
+    egressKbPerVisit: 0,
+    readsPerVisit: 0,
+  },
+  {
+    key: 'trending_engine',
+    label: 'Trending Engine',
+    description: 'Trending computation, re-engagement pushes and trending notifications.',
+    category: 'module',
+    dependencies: ['products'],
+    staticPaths: ['feeds/trending'],
+    tables: ['popular_weekly_snapshots', 'trending_hashtags'],
+    jobs: ['reengagement-push', 'engagement-jobs:trending-product'],
+    estDbSavings: '~400 reads / run',
+    estEgressSavings: '~4 MB / day',
+    egressKbPerVisit: 0,
+    readsPerVisit: 0,
   },
 ];
 
