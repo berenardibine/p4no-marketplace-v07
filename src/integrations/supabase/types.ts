@@ -1097,19 +1097,25 @@ export type Database = {
       generation_locks: {
         Row: {
           acquired_at: string
+          event_id: string | null
           expires_at: string
+          generation_id: string | null
           holder: string | null
           name: string
         }
         Insert: {
           acquired_at?: string
+          event_id?: string | null
           expires_at: string
+          generation_id?: string | null
           holder?: string | null
           name: string
         }
         Update: {
           acquired_at?: string
+          event_id?: string | null
           expires_at?: string
+          generation_id?: string | null
           holder?: string | null
           name?: string
         }
@@ -1122,9 +1128,13 @@ export type Database = {
           day: string
           db_reads: number
           duplicate_enqueues: number
+          duplicate_generations: number
+          duplicate_requests: number
           errors: number
+          events_processed: number
           files_generated: number
           files_skipped: number
+          generations_run: number
           loops_detected: number
           updated_at: string
         }
@@ -1134,9 +1144,13 @@ export type Database = {
           day: string
           db_reads?: number
           duplicate_enqueues?: number
+          duplicate_generations?: number
+          duplicate_requests?: number
           errors?: number
+          events_processed?: number
           files_generated?: number
           files_skipped?: number
+          generations_run?: number
           loops_detected?: number
           updated_at?: string
         }
@@ -1146,9 +1160,13 @@ export type Database = {
           day?: string
           db_reads?: number
           duplicate_enqueues?: number
+          duplicate_generations?: number
+          duplicate_requests?: number
           errors?: number
+          events_processed?: number
           files_generated?: number
           files_skipped?: number
+          generations_run?: number
           loops_detected?: number
           updated_at?: string
         }
@@ -4889,6 +4907,8 @@ export type Database = {
           duration_ms: number | null
           entity: string
           error: string | null
+          event_id: string | null
+          generation_id: string | null
           id: number
           ok: boolean
           paths: Json
@@ -4901,6 +4921,8 @@ export type Database = {
           duration_ms?: number | null
           entity: string
           error?: string | null
+          event_id?: string | null
+          generation_id?: string | null
           id?: number
           ok?: boolean
           paths?: Json
@@ -4913,6 +4935,8 @@ export type Database = {
           duration_ms?: number | null
           entity?: string
           error?: string | null
+          event_id?: string | null
+          generation_id?: string | null
           id?: number
           ok?: boolean
           paths?: Json
