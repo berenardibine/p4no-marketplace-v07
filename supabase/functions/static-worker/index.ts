@@ -231,9 +231,11 @@ Deno.serve(async (req) => {
     // 6. Prune loop_guard (keeps table tiny).
     await admin.rpc("prune_loop_guard").catch(() => {});
 
-    // 7. Update daily metrics (one write).
+    // 7. Update daily metrics (one write). File counters are owned by
+    //    static-generate — the worker only reports dedup + errors so nothing
+    //    is double-counted.
     await bumpMetrics({
-      files_generated: processed,
+      duplicate_enqueues: duplicates,
       files_skipped: skipped,
       errors,
     });
@@ -245,11 +247,15 @@ Deno.serve(async (req) => {
         events: events.length,
         regen_paths: plan.regenerate.length,
         remove_paths: plan.remove.length,
+        jobs: jobs.length,
+        duplicates,
+        generator: generatorResult,
         processed,
         skipped,
         errors,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+
     );
   } catch (e) {
     await bumpMetrics({ errors: 1 }).catch(() => {});
