@@ -88,7 +88,7 @@ function mapEntity(t: string): Entity | null {
   return (KNOWN_ENTITIES as string[]).includes(t) ? (t as Entity) : null;
 }
 
-async function invokeGenerator(body: Record<string, unknown>): Promise<void> {
+async function invokeGenerator(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/static-generate`, {
     method: "POST",
     headers: {
@@ -98,12 +98,13 @@ async function invokeGenerator(body: Record<string, unknown>): Promise<void> {
     },
     body: JSON.stringify(body),
   });
+  const text = await res.text();
   if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`static-generate ${res.status}: ${t.slice(0, 500)}`);
+    throw new Error(`static-generate ${res.status}: ${text.slice(0, 500)}`);
   }
-  await res.text();
+  try { return JSON.parse(text); } catch { return null; }
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
