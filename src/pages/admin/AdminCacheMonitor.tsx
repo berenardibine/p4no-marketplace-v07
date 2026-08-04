@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import InfrastructureAudit from "@/components/admin/InfrastructureAudit";
 import SupabaseLogsPanel from "@/components/admin/SupabaseLogsPanel";
+import GeneratorDedupPanel from "@/components/admin/GeneratorDedupPanel";
+
 import {
   Activity, Database, Cloud, RefreshCw, Zap, HardDrive, Clock,
   CheckCircle2, AlertTriangle, XCircle, Download, FileJson, Play,
