@@ -88,7 +88,7 @@ function mapEntity(t: string): Entity | null {
   return (KNOWN_ENTITIES as string[]).includes(t) ? (t as Entity) : null;
 }
 
-async function invokeGenerator(body: Record<string, unknown>): Promise<void> {
+async function invokeGenerator(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/static-generate`, {
     method: "POST",
     headers: {
@@ -98,12 +98,13 @@ async function invokeGenerator(body: Record<string, unknown>): Promise<void> {
     },
     body: JSON.stringify(body),
   });
+  const text = await res.text();
   if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`static-generate ${res.status}: ${t.slice(0, 500)}`);
+    throw new Error(`static-generate ${res.status}: ${text.slice(0, 500)}`);
   }
-  await res.text();
+  try { return JSON.parse(text); } catch { return null; }
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -170,77 +171,39 @@ Deno.serve(async (req) => {
     }
     const plan = planFromEvents(events);
 
-    // 5. Group into the smallest possible number of generator calls.
-    //    For every unique "root" entity kind we issue ONE regen call;
-    //    the generator itself handles both list feeds and per-slug detail
-    //    based on the payload it receives.
-    const rootEntities = new Set<Entity>();
-    const detailCalls: { entity: string; slug: string }[] = [];
-    const categoryCalls: { entity: string; category: string }[] = [];
-    const removeCalls: { entity: string; slug: string }[] = [];
+    
+    // 5. Single Event Architecture: the whole batch becomes ONE generator
+    //    call. static-generate deduplicates tasks + queries internally, so a
+    //    batch touching many entities produces exactly one generation, one
+    //    registry write, one manifest write and one log row.
+    const jobs: Record<string, unknown>[] = [];
+    const seenJob = new Set<string>();
+    let duplicates = 0;
+    const pushJob = (j: { entity: string; slug?: string; category?: string; op?: string }) => {
+      const k = `${j.entity}|${j.slug ?? ""}|${j.category ?? ""}|${j.op ?? ""}`;
+      if (seenJob.has(k)) { duplicates++; return; }
+      seenJob.add(k);
+      jobs.push(j);
+    };
 
-    for (const t of plan.regenerate) {
-      // Root feeds (no slug) → just remember the entity kind once.
-      if (!t.slug && !t.category) {
-        rootEntities.add(t.entity as Entity);
-      } else if (t.slug) {
-        detailCalls.push({ entity: t.entity, slug: t.slug });
-      } else if (t.category) {
-        // Explicit category-scoped regen (e.g. category pagination).
-        categoryCalls.push({ entity: t.entity, category: t.category });
-      }
-    }
     for (const t of plan.remove) {
-      if (t.slug) removeCalls.push({ entity: t.entity, slug: t.slug });
+      if (t.slug) pushJob({ entity: t.entity, slug: t.slug, op: "DELETE" });
+    }
+    for (const t of plan.regenerate) {
+      if (!t.slug && !t.category) pushJob({ entity: t.entity });
+      else if (t.slug) pushJob({ entity: t.entity, slug: t.slug });
+      else if (t.category) pushJob({ entity: t.entity, category: t.category });
     }
 
     let processed = 0;
     let errors = 0;
     const errList: string[] = [];
+    let generatorResult: unknown = null;
 
-    // Deletes first — they short-circuit stale detail regens.
-    for (const d of removeCalls) {
+    if (jobs.length > 0) {
       try {
-        await invokeGenerator({ entity: d.entity, slug: d.slug, op: "delete" });
-        processed++;
-      } catch (e) {
-        errors++;
-        errList.push((e as Error).message);
-      }
-    }
-    // One call per unique root entity → refreshes lists + search index.
-    for (const ent of rootEntities) {
-      try {
-        await invokeGenerator({ entity: ent });
-        processed++;
-      } catch (e) {
-        errors++;
-        errList.push((e as Error).message);
-      }
-    }
-    // Category-scoped calls (e.g. category-page pagination).
-    const seenCat = new Set<string>();
-    for (const c of categoryCalls) {
-      const k = `${c.entity}|${c.category}`;
-      if (seenCat.has(k)) continue;
-      seenCat.add(k);
-      try {
-        await invokeGenerator({ entity: c.entity, category: c.category });
-        processed++;
-      } catch (e) {
-        errors++;
-        errList.push((e as Error).message);
-      }
-    }
-    // Detail pages.
-    const seenDetail = new Set<string>();
-    for (const d of detailCalls) {
-      const k = `${d.entity}|${d.slug}`;
-      if (seenDetail.has(k)) continue;
-      seenDetail.add(k);
-      try {
-        await invokeGenerator({ entity: d.entity, slug: d.slug });
-        processed++;
+        generatorResult = await invokeGenerator({ jobs });
+        processed = jobs.length;
       } catch (e) {
         errors++;
         errList.push((e as Error).message);
@@ -257,9 +220,6 @@ Deno.serve(async (req) => {
         .in("id", doneIds);
     }
 
-    // If we hit errors, bump retries on the affected rows (best-effort — the
-    // dep graph coalesced them, so we can't attribute failure to a single row;
-    // treat the whole batch as retryable up to MAX_RETRIES).
     if (errors > 0) {
       await admin
         .from("generation_queue")
@@ -267,12 +227,15 @@ Deno.serve(async (req) => {
         .in("id", doneIds);
     }
 
+
     // 6. Prune loop_guard (keeps table tiny).
     await admin.rpc("prune_loop_guard").catch(() => {});
 
-    // 7. Update daily metrics (one write).
+    // 7. Update daily metrics (one write). File counters are owned by
+    //    static-generate — the worker only reports dedup + errors so nothing
+    //    is double-counted.
     await bumpMetrics({
-      files_generated: processed,
+      duplicate_enqueues: duplicates,
       files_skipped: skipped,
       errors,
     });
@@ -284,11 +247,15 @@ Deno.serve(async (req) => {
         events: events.length,
         regen_paths: plan.regenerate.length,
         remove_paths: plan.remove.length,
+        jobs: jobs.length,
+        duplicates,
+        generator: generatorResult,
         processed,
         skipped,
         errors,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+
     );
   } catch (e) {
     await bumpMetrics({ errors: 1 }).catch(() => {});

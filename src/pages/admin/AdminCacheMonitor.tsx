@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "@/hooks/use-toast";
 import InfrastructureAudit from "@/components/admin/InfrastructureAudit";
 import SupabaseLogsPanel from "@/components/admin/SupabaseLogsPanel";
+import GeneratorDedupPanel from "@/components/admin/GeneratorDedupPanel";
+
 import {
   Activity, Database, Cloud, RefreshCw, Zap, HardDrive, Clock,
   CheckCircle2, AlertTriangle, XCircle, Download, FileJson, Play,
@@ -629,14 +631,20 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="infra"><Server className="h-3.5 w-3.5 mr-1" />Infrastructure Audit</TabsTrigger>
           <TabsTrigger value="sblogs"><Database className="h-3.5 w-3.5 mr-1" />Supabase Logs</TabsTrigger>
+          <TabsTrigger value="dedup"><Layers className="h-3.5 w-3.5 mr-1" />Dedup</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="dedup" className="mt-4">
+          <GeneratorDedupPanel />
+        </TabsContent>
         <TabsContent value="infra" className="mt-4">
           <InfrastructureAudit />
         </TabsContent>
         <TabsContent value="sblogs" className="mt-4">
           <SupabaseLogsPanel />
         </TabsContent>
+
+
 
         {/* --- Traffic --- */}
         <TabsContent value="traffic" className="mt-4 space-y-4">
