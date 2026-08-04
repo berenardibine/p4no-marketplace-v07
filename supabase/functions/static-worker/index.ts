@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
     }
     const plan = planFromEvents(events);
 
-    // 5. Group into the smallest possible number of generator calls.
+    
     // 5. Single Event Architecture: the whole batch becomes ONE generator
     //    call. static-generate deduplicates tasks + queries internally, so a
     //    batch touching many entities produces exactly one generation, one
