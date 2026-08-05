@@ -5,6 +5,7 @@ import { useGeo } from '@/context/GeoContext';
 
 const SESSION_KEY = 'smartmarket_session_id';
 const PREF_KEY = 'smartmarket_view_pref';
+const SESSION_SYNCED_KEY = 'smartmarket_session_synced';
 
 const getSessionId = (): string => {
   let sessionId = localStorage.getItem(SESSION_KEY);
@@ -46,7 +47,10 @@ export const useViewPreference = () => {
     const sessionId = getSessionId();
     const maskedIp = ip ? ip.substring(0, 6) + '***' : null;
 
-    // Use raw rpc-style call to avoid type issues with new table
+    // The visitor row only needs to be resolved once per browser. After that
+    // a local marker short-circuits the read, so repeat visits cost zero DB.
+    if (localStorage.getItem(SESSION_SYNCED_KEY) === '1') return;
+
     const ensureSession = async () => {
       try {
         // Check if exists
@@ -68,6 +72,7 @@ export const useViewPreference = () => {
           setPreference(data.filter_preference);
           localStorage.setItem(PREF_KEY, data.filter_preference);
         }
+        localStorage.setItem(SESSION_SYNCED_KEY, '1');
       } catch {
         // Non-critical
       }

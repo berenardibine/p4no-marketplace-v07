@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useCountries, Country } from './useCountries';
+import { fetchIpGeo } from '@/lib/ipGeo';
 
 interface GeoLocationData {
   country: string | null;
@@ -61,16 +62,8 @@ export const useGeoLocation = () => {
     try {
       setGeoData(prev => ({ ...prev, loading: true, error: null }));
       
-      // Use ipapi.co for free IP geolocation
-      const response = await fetch('https://ipapi.co/json/', {
-        headers: { 'Accept': 'application/json' }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to detect location');
-      }
-      
-      const data = await response.json();
+      // Single-flight, 24h-cached IP geolocation (shared with GeoContext).
+      const data = await fetchIpGeo();
       
       // Find matching country in our database
       const matchedCountry = countries.find(

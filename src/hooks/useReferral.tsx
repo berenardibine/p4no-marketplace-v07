@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { cachedQuery } from '@/lib/queryCache';
 import { useAuth } from './useAuth';
 
 interface ReferralStats {
@@ -214,13 +215,17 @@ export const useFeaturedProducts = (userCountry?: string | null) => {
   const fetchFeatured = async () => {
     setLoading(true);
     try {
-      const { data: featured } = await supabase
-        .from('featured_products')
-        .select('*, product:products!featured_products_product_id_fkey(id, title, price, images, category, currency_symbol, rental_unit, sponsored, is_negotiable, admin_posted, country, slug, location)')
-        .eq('is_active', true)
-        .gt('end_at', new Date().toISOString())
-        .order('start_at', { ascending: false })
-        .limit(12);
+      // Global list — one shared fetch per 5 minutes for all visitors.
+      const featured = await cachedQuery<any[]>('featured:active:v1', async () => {
+        const { data } = await supabase
+          .from('featured_products')
+          .select('*, product:products!featured_products_product_id_fkey(id, title, price, images, category, currency_symbol, rental_unit, sponsored, is_negotiable, admin_posted, country, slug, location)')
+          .eq('is_active', true)
+          .gt('end_at', new Date().toISOString())
+          .order('start_at', { ascending: false })
+          .limit(12);
+        return data ?? [];
+      }, { ttlMs: 5 * 60_000 });
 
       if (featured) {
         let products = featured

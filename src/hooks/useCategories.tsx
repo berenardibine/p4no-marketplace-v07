@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { cachedQuery } from '@/lib/queryCache';
+
+// Categories are read by ~12 components. Without a shared cache each mount
+// produced its own request. One fetch per 10 minutes, shared by all callers.
+const CATEGORY_TTL = 10 * 60_000;
+
+const loadCategoryRows = (): Promise<any[]> =>
+  cachedQuery<any[]>('categories:all:v1', async () => {
+    const rows = await getContent<any[]>('categories/all');
+    if (rows) return rows;
+    if (isStrictStaticMode()) return [];
+    const { data, error } = await supabase
+      .from('categories')
+      .select('id, name, slug, icon, type')
+      .order('name');
+    if (error) throw error;
+    return data ?? [];
+  }, { ttlMs: CATEGORY_TTL });
 
 
 export interface Category {
@@ -61,16 +79,7 @@ export const useCategories = (type?: string) => {
     (async () => {
       setLoading(true);
       try {
-        let rows = await getContent<any[]>('categories/all');
-        if (!rows && !isStrictStaticMode()) {
-          const { data, error } = await supabase
-            .from('categories')
-            .select('id, name, slug, icon, type')
-            .order('name');
-          if (error) throw error;
-          rows = data ?? [];
-        }
-        rows = rows ?? [];
+        const rows = await loadCategoryRows();
         if (cancelled) return;
         const filtered = type ? rows.filter((c: any) => c.type === type) : rows;
         setCategories(decorate(filtered));
@@ -97,15 +106,7 @@ export const useCategoriesByType = () => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      let rows = await getContent<any[]>('categories/all');
-      if (!rows && !isStrictStaticMode()) {
-        const { data } = await supabase
-          .from('categories')
-          .select('id, name, slug, icon, type')
-          .order('name');
-        rows = data ?? [];
-      }
-      rows = rows ?? [];
+      const rows = await loadCategoryRows().catch(() => [] as any[]);
       if (cancelled) return;
       const grouped = decorate(rows).reduce((acc, cat) => {
         const t = cat.type || 'general';

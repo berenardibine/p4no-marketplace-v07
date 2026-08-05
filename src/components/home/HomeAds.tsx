@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ExternalLink, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getActiveAds, filterAdsForAudience } from "@/lib/adsCache";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
@@ -39,26 +39,11 @@ const HomeAds = () => {
   }, [ads.length]);
 
   const fetchActiveAds = async () => {
-    const now = new Date().toISOString();
-    
-    let query = supabase
-      .from('ads')
-      .select('*')
-      .eq('is_active', true)
-      .lte('start_date', now)
-      .gte('end_date', now)
-      .order('priority', { ascending: false });
-
-    const { data, error } = await query;
-
-    if (!error && data) {
-      // Filter by target audience
-      const userType = profile?.user_type || 'buyer';
-      const filteredAds = data.filter(ad => {
-        if (!ad.target_audience || ad.target_audience === 'all') return true;
-        return ad.target_audience === userType;
-      });
-      setAds(filteredAds);
+    try {
+      const active = await getActiveAds();
+      setAds(filterAdsForAudience(active, profile?.user_type) as Ad[]);
+    } catch {
+      /* cached/no ads — render nothing */
     }
   };
 

@@ -35,7 +35,8 @@ interface LogRow {
   paths: string[] | null; version: number | null; ok: boolean;
   error: string | null; created_at: string;
 }
-interface BlobFile { path: string; url: string; size?: number; version: number; updatedAt?: string; }
+/** A published static JSON file on the Vercel static deployment (CDN origin). */
+interface StaticFile { path: string; url: string; size?: number; version: number; updatedAt?: string; }
 type EntityKind = "all" | "product" | "service" | "reel" | "article" | "category";
 
 // ---- Helpers ----
@@ -126,11 +127,19 @@ function HealthDot({ status, reason }: { status: "healthy" | "warning" | "error"
   );
 }
 
+// cdn_metrics historically recorded a "blob" source. Vercel Blob is gone; the
+// legacy rows are surfaced as "CDN origin" rather than a fake Blob store.
 const SOURCE_COLORS: Record<string, string> = {
   browser: "hsl(142 71% 45%)",
   cdn: "hsl(199 89% 48%)",
   blob: "hsl(262 83% 58%)",
   supabase: "hsl(0 84% 60%)",
+};
+const SOURCE_LABELS: Record<string, string> = {
+  browser: "Browser / IndexedDB",
+  cdn: "CDN",
+  blob: "CDN origin (legacy)",
+  supabase: "Supabase",
 };
 
 // ---- Page ----
@@ -141,8 +150,9 @@ export default function AdminCacheMonitor() {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [blobFiles, setBlobFiles] = useState<BlobFile[]>([]);
-  const [blobLoading, setBlobLoading] = useState(false);
+  const [staticFiles, setStaticFiles] = useState<StaticFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [health, setHealth] = useState<any>(null);
   const [metrics, setMetrics] = useState<MetricRow[]>([]);
   const [metrics24h, setMetrics24h] = useState<MetricRow[]>([]);
   const [dbCounts, setDbCounts] = useState<Record<string, number>>({});
@@ -209,9 +219,9 @@ export default function AdminCacheMonitor() {
     } catch { /* ignore */ }
   }, []);
 
-  const loadBlobFiles = useCallback(async (m: Manifest | null) => {
+  const loadStaticFiles = useCallback(async (m: Manifest | null) => {
     if (!m || !STATIC_CDN.base) return;
-    setBlobLoading(true);
+    setFilesLoading(true);
     const entries = Object.entries(m.entities);
     const results = await Promise.all(entries.slice(0, 80).map(async ([path, version]) => {
       const url = `${STATIC_CDN.base}/${path}.json`;
@@ -221,11 +231,18 @@ export default function AdminCacheMonitor() {
           path, url, version,
           size: Number(r.headers.get("content-length") || 0),
           updatedAt: r.headers.get("last-modified") || undefined,
-        } as BlobFile;
-      } catch { return { path, url, version } as BlobFile; }
+        } as StaticFile;
+      } catch { return { path, url, version } as StaticFile; }
     }));
-    setBlobFiles(results);
-    setBlobLoading(false);
+    setStaticFiles(results);
+    setFilesLoading(false);
+  }, []);
+
+  // Real storage numbers straight from the publish registry (static_manifest),
+  // returned by the static-health function. Nothing here is estimated.
+  const loadHealth = useCallback(async () => {
+    const { data } = await supabase.functions.invoke("static-health", { method: "GET" as any });
+    if (data && (data as any).ok) setHealth(data);
   }, []);
 
   // Mount does the cheapest possible work: manifest comes from the CDN (no DB),
@@ -271,20 +288,10 @@ export default function AdminCacheMonitor() {
     if (error) throw error;
     toast({ title: `Integrity: ${(data as any)?.missing_count ?? 0} missing`, description: repair ? `Repaired ${(data as any)?.repaired_count ?? 0}` : undefined });
   });
-  const runCleanup = (dry: boolean) => runAction(`Cleanup ${dry ? "(dry)" : ""}`, async () => {
-    const { data, error } = await supabase.functions.invoke("static-cleanup", { body: { dry } });
-    if (error) throw error;
-    toast({ title: `Cleanup: ${(data as any)?.candidates ?? 0} candidates`, description: dry ? "Dry run" : `Deleted ${(data as any)?.deleted ?? 0}` });
-  });
-  const runRebuildManifest = () => runAction("Rebuild manifest", async () => {
-    const { data, error } = await supabase.functions.invoke("static-rebuild-manifest", { body: {} });
-    if (error) throw error;
-    toast({ title: `Manifest rebuilt`, description: `${(data as any)?.entries ?? 0} entries` });
-    await loadManifest();
-  });
   const runHealth = () => runAction("Health check", async () => {
     const { data, error } = await supabase.functions.invoke("static-health", { method: "GET" as any });
     if (error) throw error;
+    setHealth(data);
     toast({ title: `Health score: ${(data as any)?.health_score ?? "?"}/100`, description: `${(data as any)?.requests ?? 0} requests / 24h` });
   });
   const runConsistency = () => runAction("Consistency check", async () => {
@@ -322,10 +329,15 @@ export default function AdminCacheMonitor() {
     return g;
   }, [entities]);
 
-  const totalSize = blobFiles.reduce((s, b) => s + (b.size || 0), 0);
-  const avgFileSize = blobFiles.length ? totalSize / blobFiles.length : 0;
-  const largestFile = blobFiles.reduce<BlobFile | null>((m, f) =>
-    !m || (f.size || 0) > (m.size || 0) ? f : m, null);
+  // Storage footprint: prefer the authoritative registry totals from
+  // static-health; fall back to the probed subset only when health is unloaded.
+  const probedSize = staticFiles.reduce((s, b) => s + (b.size || 0), 0);
+  const totalSize = health?.storage?.bytes ?? probedSize;
+  const storedFileCount = health?.storage?.files ?? staticFiles.length;
+  const avgFileSize = health?.storage?.avg_bytes ?? (staticFiles.length ? probedSize / staticFiles.length : 0);
+  const largestFile = health?.storage?.largest
+    ? { path: health.storage.largest.path as string, size: health.storage.largest.size as number, url: `${STATIC_CDN.base}/${health.storage.largest.path}.json`, version: 0 } as StaticFile
+    : staticFiles.reduce<StaticFile | null>((m, f) => (!m || (f.size || 0) > (m.size || 0) ? f : m), null);
 
   const lastOk = logs.find((l) => l.ok);
   const lastFail = logs.find((l) => !l.ok);
@@ -431,15 +443,15 @@ export default function AdminCacheMonitor() {
   // Coverage
   const coverage = useMemo(() => {
     const rows = [
-      { key: "products", label: "Products", icon: Boxes, db: dbCounts.products || 0, blob: byPrefix.products || 0 },
-      { key: "services", label: "Services", icon: Layers, db: dbCounts.services || 0, blob: byPrefix.services || 0 },
-      { key: "articles", label: "Articles", icon: Newspaper, db: dbCounts.insight_articles || 0, blob: byPrefix.articles || 0 },
-      { key: "reels", label: "Reels", icon: Video, db: dbCounts.reels || 0, blob: byPrefix.reels || 0 },
-      { key: "categories", label: "Categories", icon: Tag, db: dbCounts.categories || 0, blob: byPrefix.categories || 0 },
+      { key: "products", label: "Products", icon: Boxes, db: dbCounts.products || 0, static: byPrefix.products || 0 },
+      { key: "services", label: "Services", icon: Layers, db: dbCounts.services || 0, static: byPrefix.services || 0 },
+      { key: "articles", label: "Articles", icon: Newspaper, db: dbCounts.insight_articles || 0, static: byPrefix.articles || 0 },
+      { key: "reels", label: "Reels", icon: Video, db: dbCounts.reels || 0, static: byPrefix.reels || 0 },
+      { key: "categories", label: "Categories", icon: Tag, db: dbCounts.categories || 0, static: byPrefix.categories || 0 },
     ];
     return rows.map((r) => ({
       ...r,
-      pct: r.db ? Math.min(100, (r.blob / r.db) * 100) : (r.blob ? 100 : 0),
+      pct: r.db ? Math.min(100, (r.static / r.db) * 100) : (r.static ? 100 : 0),
     }));
   }, [dbCounts, byPrefix]);
 
@@ -458,7 +470,7 @@ export default function AdminCacheMonitor() {
     const recs: { severity: "high" | "medium" | "low" | "info"; title: string; detail: string; }[] = [];
     if (!STATIC_CDN.base) {
       recs.push({ severity: "high", title: "CDN base URL not configured",
-        detail: "Set VITE_STATIC_CDN_BASE to your Vercel Blob public URL." });
+        detail: "Set VITE_STATIC_CDN_BASE to the public URL of the Vercel static deployment." });
     }
     if (trafficAgg.supabasePct > 5) {
       recs.push({ severity: "high", title: "Supabase serving too much static traffic",
@@ -470,7 +482,7 @@ export default function AdminCacheMonitor() {
     coverage.forEach((c) => {
       if (c.db > 0 && c.pct < 80) {
         recs.push({ severity: "medium", title: `${c.label} coverage low (${c.pct.toFixed(0)}%)`,
-          detail: `Only ${c.blob} of ${c.db} ${c.label.toLowerCase()} have static JSON. Generate ${c.label.toLowerCase()}.` });
+          detail: `Only ${c.static} of ${c.db} ${c.label.toLowerCase()} have static JSON. Generate ${c.label.toLowerCase()}.` });
       }
     });
     if (trafficAgg.browserPct >= 80) {
@@ -495,7 +507,7 @@ export default function AdminCacheMonitor() {
   const generatorHealth = failCount > 5 ? "error" : lastFail && (!lastOk || new Date(lastFail.created_at) > new Date(lastOk.created_at))
     ? "warning" : lastOk ? "healthy" : "unknown";
   const guardHealth = trafficAgg.supabasePct > 20 ? "error" : trafficAgg.supabasePct > 5 ? "warning" : "healthy";
-  const blobHealth = STATIC_CDN.base ? (blobFiles.length ? "healthy" : "warning") : "error";
+  const storageHealth = STATIC_CDN.base ? (storedFileCount ? "healthy" : "warning") : "error";
   const browserHealth = (storageInfo?.usage || 0) > 0 ? "healthy" : "unknown";
 
   // Exports
@@ -532,7 +544,7 @@ export default function AdminCacheMonitor() {
   const pieData = [
     { name: "Browser", value: trafficAgg.browser, key: "browser" },
     { name: "CDN", value: trafficAgg.cdn, key: "cdn" },
-    { name: "Blob", value: trafficAgg.blob, key: "blob" },
+    { name: SOURCE_LABELS.blob, value: trafficAgg.blob, key: "blob" },
     { name: "Supabase", value: trafficAgg.supabase, key: "supabase" },
   ].filter((d) => d.value > 0);
 
@@ -547,7 +559,7 @@ export default function AdminCacheMonitor() {
             <Badge variant="secondary" className="text-[10px] font-normal">Enterprise</Badge>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Supabase → Static Generator → Vercel Blob → CDN → Browser (IndexedDB)
+            Supabase → Static Generator → Vercel static deployment (CDN) → Browser HTTP cache → IndexedDB
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -557,7 +569,7 @@ export default function AdminCacheMonitor() {
           <Button size="sm" variant="outline" onClick={() => exportReport("json")}>
             <FileDown className="h-3.5 w-3.5 mr-1.5" /> JSON
           </Button>
-          <Button size="sm" variant="outline" onClick={() => { loadManifest(); loadLogs(); loadMetrics(); loadDbCounts(); }}>
+          <Button size="sm" variant="outline" onClick={() => { loadManifest(); loadLogs(); loadMetrics(); loadDbCounts(); loadHealth(); }}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${(manifestLoading || logsLoading) ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -587,8 +599,8 @@ export default function AdminCacheMonitor() {
             tone={trafficAgg.p95 > 500 ? "warn" : "good"} />
           <Stat label="Static Files" value={totalFiles.toLocaleString()} icon={FileJson}
             hint={`v${manifest?.version ?? "—"}`} />
-          <Stat label="Blob Storage" value={fmtBytes(totalSize)} icon={HardDrive}
-            hint={`${blobFiles.length} files probed`} />
+          <Stat label="Static Storage" value={fmtBytes(totalSize)} icon={HardDrive}
+            hint={health ? `${storedFileCount} published files` : "press Refresh for real totals"} />
         </div>
       </div>
 
@@ -600,8 +612,8 @@ export default function AdminCacheMonitor() {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div><div className="text-xs text-muted-foreground mb-1">Blob Storage</div>
-            <HealthDot status={blobHealth as any} reason={blobFiles.length ? `${blobFiles.length} files` : "empty"} /></div>
+          <div><div className="text-xs text-muted-foreground mb-1">Static Storage</div>
+            <HealthDot status={storageHealth as any} reason={storedFileCount ? `${storedFileCount} files` : "empty"} /></div>
           <div><div className="text-xs text-muted-foreground mb-1">Vercel CDN</div>
             <HealthDot status={cdnHealth as any} reason={STATIC_CDN.base ? "reachable" : "not configured"} /></div>
           <div><div className="text-xs text-muted-foreground mb-1">Manifest</div>
@@ -624,7 +636,7 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="violations"><AlertTriangle className="h-3.5 w-3.5 mr-1" />Violations</TabsTrigger>
           <TabsTrigger value="recommendations"><Sparkles className="h-3.5 w-3.5 mr-1" />Insights</TabsTrigger>
           <TabsTrigger value="generator">Generator</TabsTrigger>
-          <TabsTrigger value="blob">Blob</TabsTrigger>
+          <TabsTrigger value="storage"><HardDrive className="h-3.5 w-3.5 mr-1" />Storage</TabsTrigger>
           <TabsTrigger value="browser">Browser</TabsTrigger>
           <TabsTrigger value="manifest">Manifest</TabsTrigger>
           <TabsTrigger value="controls">Controls</TabsTrigger>
@@ -709,7 +721,7 @@ export default function AdminCacheMonitor() {
               icon={HardDrive} tone="good" hint={`${trafficAgg.browser} req · target ≥ 80%`} />
             <Stat label="CDN" value={`${trafficAgg.cdnPct.toFixed(1)}%`}
               icon={Wifi} tone="good" hint={`${trafficAgg.cdn} req · target ≥ 19%`} />
-            <Stat label="Blob (self-heal)" value={`${trafficAgg.blobPct.toFixed(1)}%`}
+            <Stat label="CDN origin (legacy)" value={`${trafficAgg.blobPct.toFixed(1)}%`}
               icon={Cloud} hint={`${trafficAgg.blob} req · target ≤ 1%`} />
             <Stat label="Supabase (fallback)" value={`${trafficAgg.supabasePct.toFixed(1)}%`}
               icon={Database} tone={trafficAgg.supabasePct > 5 ? "bad" : trafficAgg.supabasePct > 0.5 ? "warn" : "good"}
@@ -821,7 +833,7 @@ export default function AdminCacheMonitor() {
                       <span className="font-medium">{c.label}</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{c.blob} <span className="opacity-60">/ {c.db}</span> in Blob</span>
+                      <span>{c.static} <span className="opacity-60">/ {c.db}</span> published</span>
                       <span className={`font-medium ${c.pct >= 95 ? "text-emerald-600" : c.pct >= 60 ? "text-amber-600" : "text-red-600"}`}>
                         {c.pct.toFixed(0)}%
                       </span>
@@ -979,10 +991,32 @@ export default function AdminCacheMonitor() {
           </Card>
         </TabsContent>
 
-        {/* --- Blob --- */}
-        <TabsContent value="blob" className="mt-4 space-y-4">
+        {/* --- Storage (real backend: Vercel static deployment) --- */}
+        <TabsContent value="storage" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Storage Architecture</CardTitle></CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div className="flex items-center justify-between p-2 rounded border">
+                <span className="text-muted-foreground">Active storage backend</span>
+                <Badge variant="secondary">Vercel static deployment</Badge>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded border">
+                <span className="text-muted-foreground">Vercel Blob</span>
+                <Badge variant="outline">Removed — not in use</Badge>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded border">
+                <span className="text-muted-foreground">CDN base</span>
+                <span className="font-mono text-[11px] truncate max-w-[60%]">{STATIC_CDN.base || "not configured"}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded border">
+                <span className="text-muted-foreground">Browser layer</span>
+                <span>HTTP cache → IndexedDB ({fmtBytes(storageInfo?.usage)})</span>
+              </div>
+            </CardContent>
+          </Card>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Stat label="Files" value={blobFiles.length} icon={FileJson} />
+            <Stat label="Published files" value={storedFileCount} icon={FileJson}
+              hint={health ? "from static_manifest" : "probe subset"} />
             <Stat label="Total size" value={fmtBytes(totalSize)} icon={HardDrive} />
             <Stat label="Avg size" value={fmtBytes(avgFileSize)} icon={Layers} />
             <Stat label="Largest" value={fmtBytes(largestFile?.size)} icon={TrendingUp}
@@ -990,10 +1024,13 @@ export default function AdminCacheMonitor() {
           </div>
           <Card>
             <CardHeader className="pb-2 flex-row items-center justify-between">
-              <CardTitle className="text-sm">Blob Files</CardTitle>
-              <Button size="sm" variant="ghost" onClick={() => loadBlobFiles(manifest)}>
-                <RefreshCw className={`h-3.5 w-3.5 ${blobLoading ? "animate-spin" : ""}`} />
-              </Button>
+              <CardTitle className="text-sm">Published Static Files (probe)</CardTitle>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={loadHealth}>Real totals</Button>
+                <Button size="sm" variant="ghost" onClick={() => loadStaticFiles(manifest)}>
+                  <RefreshCw className={`h-3.5 w-3.5 ${filesLoading ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto max-h-[500px]">
@@ -1008,12 +1045,12 @@ export default function AdminCacheMonitor() {
                     </tr>
                   </thead>
                   <tbody>
-                    {blobFiles.length === 0 && (
+                    {staticFiles.length === 0 && (
                       <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">
-                        {STATIC_CDN.base ? "No files yet. Run Warm Everything." : "STATIC_CDN base not configured."}
+                        {STATIC_CDN.base ? "Press the refresh icon to probe published files." : "STATIC_CDN base not configured."}
                       </td></tr>
                     )}
-                    {blobFiles.sort((a, b) => (b.size || 0) - (a.size || 0)).map((f) => (
+                    {staticFiles.slice().sort((a, b) => (b.size || 0) - (a.size || 0)).map((f) => (
                       <tr key={f.path} className="border-t">
                         <td className="p-2 font-mono text-xs">{f.path}.json</td>
                         <td className="p-2 text-xs">{f.version}</td>
@@ -1138,9 +1175,6 @@ export default function AdminCacheMonitor() {
             <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-2">
               <ActionBtn label="Validate integrity" icon={Shield} onClick={() => runIntegrity(false)} />
               <ActionBtn label="Generate missing files" icon={Play} variant="default" onClick={() => runIntegrity(true)} />
-              <ActionBtn label="Rebuild manifest" icon={RefreshCw} onClick={runRebuildManifest} />
-              <ActionBtn label="Clean old blobs (dry)" icon={FileJson} onClick={() => runCleanup(true)} />
-              <ActionBtn label="Clean old blobs" icon={FileJson} variant="destructive" onClick={() => runCleanup(false)} />
               <ActionBtn label="Run health check" icon={Zap} onClick={runHealth} />
               <ActionBtn label="Consistency check" icon={Shield} onClick={runConsistency} />
               <ActionBtn label="Repair IndexedDB" icon={Database} variant="destructive" onClick={runRepairIDB} />
@@ -1204,7 +1238,7 @@ export default function AdminCacheMonitor() {
 
       <div className="text-xs text-muted-foreground pt-4 border-t">
         Last success: {lastOk ? fmtTime(lastOk.created_at) : "—"} · Last failure: {lastFail ? fmtTime(lastFail.created_at) : "—"} ·
-        Dashboard auto-refreshes every 15s
+        Manual refresh only — this dashboard never polls the database
       </div>
     </div>
   );
