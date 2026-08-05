@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { cachedQuery, invalidateQuery } from '@/lib/queryCache';
+
+// The active-boost list is identical for every visitor, so it is fetched once
+// per 5 minutes and shared instead of once per page view.
+const BOOST_TTL = 5 * 60_000;
+const BOOST_KEY = 'boosts:active:v1';
 
 interface BoostedProduct {
   id: string;
@@ -22,18 +28,21 @@ export const useBoostedProducts = () => {
   const [boosts, setBoosts] = useState<BoostedProduct[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchActiveBoosts = useCallback(async () => {
+  const fetchActiveBoosts = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('boosted_products')
-        .select('*, product:products(id, title, images, price, slug, category, rental_unit, is_negotiable, sponsored)')
-        .eq('status', 'active')
-        .gt('end_date', new Date().toISOString())
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setBoosts((data || []) as BoostedProduct[]);
+      if (force) invalidateQuery(BOOST_KEY);
+      const data = await cachedQuery<BoostedProduct[]>(BOOST_KEY, async () => {
+        const { data, error } = await supabase
+          .from('boosted_products')
+          .select('*, product:products(id, title, images, price, slug, category, rental_unit, is_negotiable, sponsored)')
+          .eq('status', 'active')
+          .gt('end_date', new Date().toISOString())
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return (data || []) as BoostedProduct[];
+      }, { ttlMs: BOOST_TTL });
+      setBoosts(data);
     } catch (err) {
       console.error('Error fetching boosted products:', err);
     } finally {
@@ -45,7 +54,7 @@ export const useBoostedProducts = () => {
     fetchActiveBoosts();
   }, [fetchActiveBoosts]);
 
-  return { boosts, loading, refetch: fetchActiveBoosts };
+  return { boosts, loading, refetch: () => fetchActiveBoosts(true) };
 };
 
 export const useSellerBoosts = () => {
