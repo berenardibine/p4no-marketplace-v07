@@ -1,6 +1,11 @@
 // Aggregate health snapshot for the Admin Cache Monitor.
-// Returns cache hit distribution (24h), manifest coverage, recent gen log, blob totals.
-import { list } from "npm:@vercel/blob@0.27.3";
+//
+// Storage architecture (real, as of the Vercel Blob removal):
+//   Supabase (source of truth) → static-generate → Vercel static deployment (CDN)
+//   → browser HTTP cache → IndexedDB.
+// There is NO Vercel Blob store anymore, so this function reports real storage
+// numbers from `static_manifest` (the registry of every published file) instead
+// of listing blobs.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
@@ -11,7 +16,6 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BLOB_TOKEN = Deno.env.get("BLOB_READ_WRITE_TOKEN")!;
 const CDN = (Deno.env.get("STATIC_CDN_BASE") ?? "").replace(/\/+$/, "");
 
 const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
@@ -23,16 +27,18 @@ Deno.serve(async (req) => {
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    const [metricsRes, logsRes, manifestRes] = await Promise.all([
+    const [metricsRes, logsRes, manifestRes, filesRes] = await Promise.all([
       admin.from("cdn_metrics").select("source,ms,violation,created_at").gte("created_at", since).limit(10000),
       admin.from("static_gen_log").select("*").order("created_at", { ascending: false }).limit(50),
       CDN ? fetch(`${CDN}/manifest.json`, { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null),
+      admin.from("static_manifest").select("path,size,entity,shard,generated_at").limit(20000),
     ]);
 
     const metrics = metricsRes.data ?? [];
     const counters = { browser: 0, cdn: 0, blob: 0, supabase: 0, violations: 0, totalMs: 0, count: 0 };
     for (const m of metrics) {
-      counters[m.source as keyof typeof counters] = (counters[m.source as keyof typeof counters] as number) + 1;
+      const key = m.source as keyof typeof counters;
+      if (key in counters) counters[key] = (counters[key] as number) + 1;
       if (m.violation) counters.violations += 1;
       counters.totalMs += m.ms || 0;
       counters.count += 1;
@@ -45,18 +51,22 @@ Deno.serve(async (req) => {
     // Health score: 100 - supabasePct*2 - violationsPct*3, clamped.
     const healthScore = Math.max(0, Math.min(100, Math.round(100 - supabasePct * 2 - violationsPct * 3)));
 
-    // Blob totals (best-effort)
-    let blobFiles = 0, blobBytes = 0;
-    try {
-      let cursor: string | undefined = undefined;
-      while (true) {
-        const page: any = await list({ token: BLOB_TOKEN, cursor, limit: 1000 });
-        for (const b of page.blobs ?? []) { blobFiles += 1; blobBytes += b.size || 0; }
-        if (!page.hasMore) break;
-        cursor = page.cursor;
-        if (blobFiles > 5000) break;
-      }
-    } catch { /* ignore */ }
+    // Real static storage footprint, straight from the publish registry.
+    const files = filesRes.data ?? [];
+    let storageBytes = 0;
+    let largest: { path: string; size: number } | null = null;
+    const byEntity: Record<string, { files: number; bytes: number }> = {};
+    const shards = new Set<string>();
+    for (const f of files) {
+      const size = (f.size as number) || 0;
+      storageBytes += size;
+      if (!largest || size > largest.size) largest = { path: f.path as string, size };
+      const e = (f.entity as string) || "other";
+      byEntity[e] ??= { files: 0, bytes: 0 };
+      byEntity[e].files += 1;
+      byEntity[e].bytes += size;
+      if (f.shard) shards.add(f.shard as string);
+    }
 
     return new Response(JSON.stringify({
       ok: true,
@@ -64,7 +74,7 @@ Deno.serve(async (req) => {
       window_hours: 24,
       requests: counters.count,
       distribution: {
-        browser: counters.browser, cdn: counters.cdn, blob: counters.blob, supabase: counters.supabase,
+        browser: counters.browser, cdn: counters.cdn, supabase: counters.supabase,
         violations: counters.violations,
       },
       supabase_pct: supabasePct,
@@ -72,7 +82,16 @@ Deno.serve(async (req) => {
       violations_pct: violationsPct,
       avg_latency_ms: Math.round(counters.totalMs / total),
       manifest: manifestRes ? { version: manifestRes.version, entries: Object.keys(manifestRes.entities ?? {}).length } : null,
-      blob: { files: blobFiles, bytes: blobBytes },
+      storage: {
+        backend: "vercel-static-deployment",
+        cdn_base: CDN || null,
+        files: files.length,
+        bytes: storageBytes,
+        avg_bytes: files.length ? Math.round(storageBytes / files.length) : 0,
+        largest,
+        shards: shards.size,
+        by_entity: byEntity,
+      },
       recent_logs: logsRes.data ?? [],
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
