@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getActiveAds } from '@/lib/adsCache';
 import { getCachedList, getCachedCategory } from '@/lib/productCache';
 
 interface Product {
@@ -41,30 +42,21 @@ export const useHomeSections = (categoryFilter?: string) => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Redis-first: products from cache edge function; ads stay on Supabase
-      // (time-windowed, low volume, not worth caching).
+      // Static-first: products from the CDN cache; ads come from the shared
+      // single-flight ads cache so HomeAds and this hook never double-fetch.
       const productsPromise = categoryFilter && categoryFilter !== 'all'
         ? getCachedCategory(categoryFilter, 0, 100)
         : getCachedList('latest', 0, 100);
 
-      const [cachedProducts, adsRes] = await Promise.all([
+      const [cachedProducts, activeAds] = await Promise.all([
         productsPromise,
-        supabase
-          .from('ads')
-          .select('id, title, description, image_url, link, bg_color, text_color, type')
-          .eq('is_active', true)
-          .gte('end_date', new Date().toISOString())
-          .lte('start_date', new Date().toISOString())
-          .order('priority', { ascending: false })
-          .limit(5)
+        getActiveAds().catch(() => []),
       ]);
 
       if (Array.isArray(cachedProducts)) {
         setProducts(cachedProducts as unknown as Product[]);
       }
-      if (adsRes.data) {
-        setAds(adsRes.data);
-      }
+      setAds(activeAds.slice(0, 5) as unknown as Ad[]);
     } catch (error) {
       console.error('Error fetching home data:', error);
     } finally {

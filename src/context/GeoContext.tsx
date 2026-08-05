@@ -2,6 +2,7 @@ import { createContext, useContext, ReactNode, useState, useEffect } from 'react
 import { useCountries, Country } from '@/hooks/useCountries';
 import { useGPSLocation, saveLocationToDB } from '@/hooks/useGPSLocation';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchIpGeo } from '@/lib/ipGeo';
 
 interface GeoContextType {
   country: string | null;
@@ -90,15 +91,7 @@ export const GeoProvider = ({ children }: { children: ReactNode }) => {
     try {
       setLoading(true);
       
-      const response = await fetch('https://ipapi.co/json/', {
-        headers: { 'Accept': 'application/json' }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Location detection failed');
-      }
-      
-      const data = await response.json();
+      const data = await fetchIpGeo();
       
       // Match with our countries database
       const matchedCountry = countries.find(
