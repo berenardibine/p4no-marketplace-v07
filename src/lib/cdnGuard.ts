@@ -18,6 +18,8 @@ import { idbGet, idbPut, idbDelete, idbClear } from './idbCache';
 import { getManifest } from './staticCDN';
 import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
+import { recordTraffic } from './trafficTelemetry';
+
 
 // Exponential backoff for self-heal retries after 404.
 const HEAL_RETRIES = [800, 2000, 4500] as const;
