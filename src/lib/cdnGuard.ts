@@ -356,15 +356,18 @@ export async function getContent<T = unknown>(
     }
 
 
-    // 3) CDN fetch
+    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it)
     try {
-      const res = await fetch(cdnUrl(key), {
+      const url = cdnUrl(key);
+      const res = await fetch(url, {
         headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
       });
       const ms = Date.now() - started;
 
       if (res.status === 304 && cached) {
         record({ path: key, source: 'cdn', ms, status: 304, at: Date.now() });
+        recordTraffic({ path: key, layer: 'browser', bytes: 0, ms, at: Date.now(), missReason: 'idb-version-stale' });
+        memPut(key, cached.data, cached.version);
         return unwrap<T>(cached.data);
       }
 
@@ -373,7 +376,16 @@ export async function getContent<T = unknown>(
         const payload = unwrap<T>(env);
         const version = (env as Envelope<T>)?.v ?? expectedVersion ?? Date.now();
         await idbPut(key, env, version);
+        memPut(key, env, version);
         record({ path: key, source: 'cdn', ms, status: res.status, at: Date.now() });
+        recordTraffic({
+          path: key,
+          layer: servedFromBrowserCache(url) ? 'browser' : 'cdn',
+          bytes: approxBytes(env),
+          ms,
+          at: Date.now(),
+          missReason: cached ? 'version-bump' : 'cold-cache',
+        });
         return payload;
       }
 
@@ -392,7 +404,9 @@ export async function getContent<T = unknown>(
                 const payload = unwrap<T>(env);
                 const version = (env as Envelope<T>)?.v ?? Date.now();
                 await idbPut(key, env, version);
+                memPut(key, env, version);
                 record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
+                recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
                 return payload;
               }
             } catch { /* keep retrying */ }
@@ -403,8 +417,10 @@ export async function getContent<T = unknown>(
       // 5) Stale IDB → return it while we recover
       if (cached) {
         record({ path: key, source: 'browser', ms, status: 200, at: Date.now() });
+        recordTraffic({ path: key, layer: 'idb', bytes: 0, ms, at: Date.now(), missReason: 'stale-while-missing' });
         return unwrap<T>(cached.data);
       }
+
 
       // 6) STRICT mode: refuse Supabase fallback. Queue regen, log violation, return null.
       if (isStrictStaticMode()) {
