@@ -147,6 +147,8 @@ export interface TrafficSnapshot {
 const AVG_DB_PAYLOAD_BYTES = 1400;
 
 export function getTrafficSnapshot(): TrafficSnapshot {
+  if (cachedSnapshot) return cachedSnapshot;
+
   const total =
     layerCount.memory + layerCount.browser + layerCount.idb + layerCount.cdn + layerCount.db;
   const denom = total || 1;
