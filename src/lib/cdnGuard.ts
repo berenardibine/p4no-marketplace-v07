@@ -271,8 +271,40 @@ export interface GetContentOptions<T> {
   fallback?: () => Promise<T | null>;
 }
 
+// -------------------- Layer 1: in-process memory --------------------
+
+interface MemEntry { data: unknown; version: number; at: number }
+const memory = new Map<string, MemEntry>();
+const MEMORY_TTL_MS = 60_000;
+const MEMORY_MAX = 300;
+
+function memPut(key: string, data: unknown, version: number) {
+  if (memory.size >= MEMORY_MAX) {
+    const oldest = memory.keys().next().value as string | undefined;
+    if (oldest) memory.delete(oldest);
+  }
+  memory.set(key, { data, version, at: Date.now() });
+}
+
+/** Approximate payload size without re-serialising huge structures twice. */
+function approxBytes(v: unknown): number {
+  try { return JSON.stringify(v)?.length ?? 0; } catch { return 0; }
+}
+
+/** True when the browser served the URL from its own HTTP cache (L2). */
+function servedFromBrowserCache(url: string): boolean {
+  try {
+    const entries = performance.getEntriesByName(url) as PerformanceResourceTiming[];
+    const last = entries[entries.length - 1];
+    return !!last && last.transferSize === 0 && last.decodedBodySize > 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Layered fetcher — the ONLY sanctioned way to read static content.
+ * memory → browser HTTP cache → IndexedDB → CDN → database (last resort).
  */
 export async function getContent<T = unknown>(
   path: string,
@@ -289,6 +321,14 @@ export async function getContent<T = unknown>(
 
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+
+  // L1 — memory
+  const mem = memory.get(key);
+  if (mem && Date.now() - mem.at < MEMORY_TTL_MS) {
+    recordTraffic({ path: key, layer: 'memory', bytes: 0, ms: 0, at: Date.now() });
+    return unwrap<T>(mem.data);
+  }
+
   if (inFlight.has(key)) return inFlight.get(key) as Promise<T | null>;
 
   const p = (async () => {
@@ -309,9 +349,12 @@ export async function getContent<T = unknown>(
 
     if (cached && expectedVersion && cached.version === expectedVersion) {
       const payload = unwrap<T>(cached.data);
+      memPut(key, cached.data, cached.version);
       record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
+      recordTraffic({ path: key, layer: 'idb', bytes: 0, ms: Date.now() - started, at: Date.now() });
       return payload;
     }
+
 
     // 3) CDN fetch
     try {
