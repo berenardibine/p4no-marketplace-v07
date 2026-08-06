@@ -259,6 +259,8 @@ const App = () => {
                 <Route path="/admin/static-architecture" element={<AdminStaticArchitecture />} />
                 <Route path="/admin/product-static" element={<AdminProductStatic />} />
                 <Route path="/admin/performance" element={<AdminPerformanceCenter />} />
+                <Route path="/admin/traffic" element={<AdminTrafficDashboard />} />
+
 
                 <Route path="/admin/email-center" element={<AdminEmailCenter />} />
                 <Route path="/admin/boosts" element={<AdminBoosts />} />
