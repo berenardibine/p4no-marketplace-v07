@@ -157,7 +157,7 @@ export function getTrafficSnapshot(): TrafficSnapshot {
 
   const pct = (n: number) => (n / denom) * 100;
 
-  return {
+  cachedSnapshot = {
     total,
     layerCount: { ...layerCount },
     layerBytes: { ...layerBytes },
