@@ -99,6 +99,8 @@ import AdminCacheMonitor from "./pages/admin/AdminCacheMonitor";
 import AdminStaticArchitecture from "./pages/admin/AdminStaticArchitecture";
 import AdminProductStatic from "./pages/admin/AdminProductStatic";
 import AdminPerformanceCenter from "./pages/admin/AdminPerformanceCenter";
+import AdminTrafficDashboard from "./pages/admin/AdminTrafficDashboard";
+
 
 import AdminEmailCenter from "./pages/admin/AdminEmailCenter";
 import AdminBoosts from "./pages/admin/AdminBoosts";
