@@ -56,11 +56,16 @@ let startedAt = Date.now();
 
 const listeners = new Set<() => void>();
 
+// useSyncExternalStore requires a stable snapshot reference between changes.
+let cachedSnapshot: TrafficSnapshot | null = null;
+
 function notify() {
+  cachedSnapshot = null;
   listeners.forEach((fn) => {
     try { fn(); } catch { /* ignore */ }
   });
 }
+
 
 export function subscribeTraffic(fn: () => void): () => void {
   listeners.add(fn);
