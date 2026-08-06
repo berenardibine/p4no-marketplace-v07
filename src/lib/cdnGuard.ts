@@ -498,12 +498,37 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
 
 export async function invalidateContent(path: string): Promise<void> {
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  memory.delete(key);
   await idbDelete(key);
 }
 
 /** Nuclear: wipe every cached static payload from IndexedDB. */
 export async function repairIndexedDB(): Promise<void> {
+  memory.clear();
   await idbClear();
   regenerated.clear();
 }
+
+/**
+ * Warm a static path into the cache hierarchy without blocking the caller.
+ * Used by the prefetch scheduler — never triggers a database read.
+ */
+export async function warmContent(path: string): Promise<void> {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  if (memory.has(key) || inFlight.has(key)) return;
+  try { await getContent(key); } catch { /* prefetch is best-effort */ }
+}
+
+/** True when a path is already resolvable from L1 memory. */
+export function isWarm(path: string): boolean {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const m = memory.get(key);
+  return !!m && Date.now() - m.at < MEMORY_TTL_MS;
+}
+
+// Content changed upstream → drop L1 so the next read revalidates.
+if (typeof window !== 'undefined') {
+  window.addEventListener('p4no:manifest-updated', () => memory.clear());
+}
+
 
