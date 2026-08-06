@@ -51,6 +51,8 @@ const ProductCard = ({
   const { isFavorite, toggleFavorite } = useFavorites();
   const { connectionCount, isConnected, toggleConnection, loading: connectionLoading } = useSellerConnections(sellerId);
   const [isAnimating, setIsAnimating] = useState(false);
+  const prefetchRef = usePrefetchProduct<HTMLDivElement>(id);
+
   const favorite = isFavorite(id);
   const isDiscounted = hasActiveDiscount(discount, discountExpiry);
   const discountedPrice = isDiscounted ? getDiscountedPrice(price, discount!) : price;
