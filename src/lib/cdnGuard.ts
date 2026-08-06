@@ -460,6 +460,7 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
   const started = Date.now();
   if (!fn) {
     record({ path, source: 'supabase', ms: 0, status: 404, violation: true, at: Date.now() });
+    recordTraffic({ path, layer: 'db', bytes: 0, ms: 0, at: Date.now(), missReason: 'no-static-no-fallback' });
     return null;
   }
   try {
@@ -472,8 +473,17 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
       violation: true,
       at: Date.now(),
     });
+    recordTraffic({
+      path,
+      layer: 'db',
+      bytes: approxBytes(out),
+      ms: Date.now() - started,
+      at: Date.now(),
+      missReason: 'static-missing',
+    });
     return out;
   } catch {
+
     record({
       path,
       source: 'supabase',
