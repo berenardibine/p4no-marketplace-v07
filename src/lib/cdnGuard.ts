@@ -18,6 +18,8 @@ import { idbGet, idbPut, idbDelete, idbClear } from './idbCache';
 import { getManifest } from './staticCDN';
 import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
+import { recordTraffic } from './trafficTelemetry';
+
 
 // Exponential backoff for self-heal retries after 404.
 const HEAL_RETRIES = [800, 2000, 4500] as const;
@@ -271,8 +273,40 @@ export interface GetContentOptions<T> {
   fallback?: () => Promise<T | null>;
 }
 
+// -------------------- Layer 1: in-process memory --------------------
+
+interface MemEntry { data: unknown; version: number; at: number }
+const memory = new Map<string, MemEntry>();
+const MEMORY_TTL_MS = 60_000;
+const MEMORY_MAX = 300;
+
+function memPut(key: string, data: unknown, version: number) {
+  if (memory.size >= MEMORY_MAX) {
+    const oldest = memory.keys().next().value as string | undefined;
+    if (oldest) memory.delete(oldest);
+  }
+  memory.set(key, { data, version, at: Date.now() });
+}
+
+/** Approximate payload size without re-serialising huge structures twice. */
+function approxBytes(v: unknown): number {
+  try { return JSON.stringify(v)?.length ?? 0; } catch { return 0; }
+}
+
+/** True when the browser served the URL from its own HTTP cache (L2). */
+function servedFromBrowserCache(url: string): boolean {
+  try {
+    const entries = performance.getEntriesByName(url) as PerformanceResourceTiming[];
+    const last = entries[entries.length - 1];
+    return !!last && last.transferSize === 0 && last.decodedBodySize > 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Layered fetcher — the ONLY sanctioned way to read static content.
+ * memory → browser HTTP cache → IndexedDB → CDN → database (last resort).
  */
 export async function getContent<T = unknown>(
   path: string,
@@ -289,6 +323,14 @@ export async function getContent<T = unknown>(
 
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+
+  // L1 — memory
+  const mem = memory.get(key);
+  if (mem && Date.now() - mem.at < MEMORY_TTL_MS) {
+    recordTraffic({ path: key, layer: 'memory', bytes: 0, ms: 0, at: Date.now() });
+    return unwrap<T>(mem.data);
+  }
+
   if (inFlight.has(key)) return inFlight.get(key) as Promise<T | null>;
 
   const p = (async () => {
@@ -309,19 +351,25 @@ export async function getContent<T = unknown>(
 
     if (cached && expectedVersion && cached.version === expectedVersion) {
       const payload = unwrap<T>(cached.data);
+      memPut(key, cached.data, cached.version);
       record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
+      recordTraffic({ path: key, layer: 'idb', bytes: 0, ms: Date.now() - started, at: Date.now() });
       return payload;
     }
 
-    // 3) CDN fetch
+
+    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it)
     try {
-      const res = await fetch(cdnUrl(key), {
+      const url = cdnUrl(key);
+      const res = await fetch(url, {
         headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
       });
       const ms = Date.now() - started;
 
       if (res.status === 304 && cached) {
         record({ path: key, source: 'cdn', ms, status: 304, at: Date.now() });
+        recordTraffic({ path: key, layer: 'browser', bytes: 0, ms, at: Date.now(), missReason: 'idb-version-stale' });
+        memPut(key, cached.data, cached.version);
         return unwrap<T>(cached.data);
       }
 
@@ -330,7 +378,16 @@ export async function getContent<T = unknown>(
         const payload = unwrap<T>(env);
         const version = (env as Envelope<T>)?.v ?? expectedVersion ?? Date.now();
         await idbPut(key, env, version);
+        memPut(key, env, version);
         record({ path: key, source: 'cdn', ms, status: res.status, at: Date.now() });
+        recordTraffic({
+          path: key,
+          layer: servedFromBrowserCache(url) ? 'browser' : 'cdn',
+          bytes: approxBytes(env),
+          ms,
+          at: Date.now(),
+          missReason: cached ? 'version-bump' : 'cold-cache',
+        });
         return payload;
       }
 
@@ -349,7 +406,9 @@ export async function getContent<T = unknown>(
                 const payload = unwrap<T>(env);
                 const version = (env as Envelope<T>)?.v ?? Date.now();
                 await idbPut(key, env, version);
+                memPut(key, env, version);
                 record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
+                recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
                 return payload;
               }
             } catch { /* keep retrying */ }
@@ -360,8 +419,10 @@ export async function getContent<T = unknown>(
       // 5) Stale IDB → return it while we recover
       if (cached) {
         record({ path: key, source: 'browser', ms, status: 200, at: Date.now() });
+        recordTraffic({ path: key, layer: 'idb', bytes: 0, ms, at: Date.now(), missReason: 'stale-while-missing' });
         return unwrap<T>(cached.data);
       }
+
 
       // 6) STRICT mode: refuse Supabase fallback. Queue regen, log violation, return null.
       if (isStrictStaticMode()) {
@@ -399,6 +460,7 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
   const started = Date.now();
   if (!fn) {
     record({ path, source: 'supabase', ms: 0, status: 404, violation: true, at: Date.now() });
+    recordTraffic({ path, layer: 'db', bytes: 0, ms: 0, at: Date.now(), missReason: 'no-static-no-fallback' });
     return null;
   }
   try {
@@ -411,8 +473,17 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
       violation: true,
       at: Date.now(),
     });
+    recordTraffic({
+      path,
+      layer: 'db',
+      bytes: approxBytes(out),
+      ms: Date.now() - started,
+      at: Date.now(),
+      missReason: 'static-missing',
+    });
     return out;
   } catch {
+
     record({
       path,
       source: 'supabase',
@@ -427,12 +498,37 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
 
 export async function invalidateContent(path: string): Promise<void> {
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  memory.delete(key);
   await idbDelete(key);
 }
 
 /** Nuclear: wipe every cached static payload from IndexedDB. */
 export async function repairIndexedDB(): Promise<void> {
+  memory.clear();
   await idbClear();
   regenerated.clear();
 }
+
+/**
+ * Warm a static path into the cache hierarchy without blocking the caller.
+ * Used by the prefetch scheduler — never triggers a database read.
+ */
+export async function warmContent(path: string): Promise<void> {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  if (memory.has(key) || inFlight.has(key)) return;
+  try { await getContent(key); } catch { /* prefetch is best-effort */ }
+}
+
+/** True when a path is already resolvable from L1 memory. */
+export function isWarm(path: string): boolean {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const m = memory.get(key);
+  return !!m && Date.now() - m.at < MEMORY_TTL_MS;
+}
+
+// Content changed upstream → drop L1 so the next read revalidates.
+if (typeof window !== 'undefined') {
+  window.addEventListener('p4no:manifest-updated', () => memory.clear());
+}
+
 

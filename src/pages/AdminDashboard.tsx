@@ -158,7 +158,9 @@ const AdminDashboard = () => {
     { id: 'seller-badges', label: 'Seller Badges', icon: MessageCircle, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-50 dark:bg-amber-950/30', path: '/admin/seller-badges', description: 'View earned badges & progress' },
     { id: 'push-debug', label: 'Push Debug', icon: Bell, color: 'from-fuchsia-500 to-purple-500', bg: 'bg-fuchsia-50 dark:bg-fuchsia-950/30', path: '/admin/push', description: 'FCM tokens & test push' },
     { id: 'cache', label: 'Cache Monitor', icon: Database, color: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30', path: '/admin/cache', description: 'Redis cache & egress stats' },
+    { id: 'traffic', label: 'Enterprise Traffic', icon: Database, color: 'from-sky-500 to-indigo-500', bg: 'bg-sky-50 dark:bg-sky-950/30', path: '/admin/traffic', description: '5-layer hit ratios & egress savings' },
   ];
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pb-24">

@@ -11,6 +11,8 @@ import DiscountBadge from "@/components/discount/DiscountBadge";
 import DiscountCountdown from "@/components/discount/DiscountCountdown";
 import { hasActiveDiscount, getDiscountedPrice } from "@/lib/discount";
 import SaveButton from "@/components/social/SaveButton";
+import { usePrefetchProduct } from "@/hooks/usePrefetchProduct";
+
 
 interface ProductCardProps {
   id: string;
@@ -49,6 +51,8 @@ const ProductCard = ({
   const { isFavorite, toggleFavorite } = useFavorites();
   const { connectionCount, isConnected, toggleConnection, loading: connectionLoading } = useSellerConnections(sellerId);
   const [isAnimating, setIsAnimating] = useState(false);
+  const prefetchRef = usePrefetchProduct<HTMLDivElement>(id);
+
   const favorite = isFavorite(id);
   const isDiscounted = hasActiveDiscount(discount, discountExpiry);
   const discountedPrice = isDiscounted ? getDiscountedPrice(price, discount!) : price;
@@ -111,6 +115,7 @@ const ProductCard = ({
 
   return (
     <div 
+      ref={prefetchRef}
       className={cn(
         "group relative bg-card rounded-2xl overflow-hidden cursor-pointer flex flex-col",
         "border border-border shadow-soft",
@@ -118,6 +123,7 @@ const ProductCard = ({
         "transition-all duration-300 ease-out"
       )}
     >
+
       {/* Image Container */}
       <div 
         onClick={handleClick}

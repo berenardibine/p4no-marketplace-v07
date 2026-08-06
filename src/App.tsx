@@ -99,6 +99,8 @@ import AdminCacheMonitor from "./pages/admin/AdminCacheMonitor";
 import AdminStaticArchitecture from "./pages/admin/AdminStaticArchitecture";
 import AdminProductStatic from "./pages/admin/AdminProductStatic";
 import AdminPerformanceCenter from "./pages/admin/AdminPerformanceCenter";
+import AdminTrafficDashboard from "./pages/admin/AdminTrafficDashboard";
+
 
 import AdminEmailCenter from "./pages/admin/AdminEmailCenter";
 import AdminBoosts from "./pages/admin/AdminBoosts";
@@ -257,6 +259,8 @@ const App = () => {
                 <Route path="/admin/static-architecture" element={<AdminStaticArchitecture />} />
                 <Route path="/admin/product-static" element={<AdminProductStatic />} />
                 <Route path="/admin/performance" element={<AdminPerformanceCenter />} />
+                <Route path="/admin/traffic" element={<AdminTrafficDashboard />} />
+
 
                 <Route path="/admin/email-center" element={<AdminEmailCenter />} />
                 <Route path="/admin/boosts" element={<AdminBoosts />} />
