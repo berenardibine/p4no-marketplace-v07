@@ -111,6 +111,7 @@ const ProductCard = ({
 
   return (
     <div 
+      ref={prefetchRef}
       className={cn(
         "group relative bg-card rounded-2xl overflow-hidden cursor-pointer flex flex-col",
         "border border-border shadow-soft",
@@ -118,6 +119,7 @@ const ProductCard = ({
         "transition-all duration-300 ease-out"
       )}
     >
+
       {/* Image Container */}
       <div 
         onClick={handleClick}
