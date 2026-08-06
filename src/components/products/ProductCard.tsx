@@ -11,6 +11,8 @@ import DiscountBadge from "@/components/discount/DiscountBadge";
 import DiscountCountdown from "@/components/discount/DiscountCountdown";
 import { hasActiveDiscount, getDiscountedPrice } from "@/lib/discount";
 import SaveButton from "@/components/social/SaveButton";
+import { usePrefetchProduct } from "@/hooks/usePrefetchProduct";
+
 
 interface ProductCardProps {
   id: string;
