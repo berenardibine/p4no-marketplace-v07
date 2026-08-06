@@ -186,4 +186,6 @@ export function getTrafficSnapshot(): TrafficSnapshot {
     prefetchUsed,
     sinceMs: Date.now() - startedAt,
   };
+  return cachedSnapshot;
 }
+
