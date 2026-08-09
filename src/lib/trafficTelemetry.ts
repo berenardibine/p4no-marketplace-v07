@@ -14,6 +14,7 @@
 // Pure in-memory. Nothing here writes to the database.
 
 import { recordBudgetEvent } from './requestBudget';
+import { publishDelivery } from './telemetryBus';
 
 export type TrafficLayer = 'memory' | 'browser' | 'idb' | 'cdn' | 'db';
 
@@ -33,6 +34,14 @@ export interface TrafficEvent {
   at: number;
   /** Why the request fell past the previous layer. */
   missReason?: string;
+  /** HTTP-ish status of the delivery (200 by default). */
+  status?: number;
+  /** App route the request was made from (`/products/:slug` shape). */
+  route?: string;
+  /** product | service | category | article | manifest | table:<name> ... */
+  resourceType?: string;
+  /** Correlation id for the Live Request Inspector. */
+  requestId?: string;
 }
 
 interface PathAgg {
@@ -74,8 +83,51 @@ export function subscribeTraffic(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
+/** Collapse a concrete URL into a route shape: /products/abc -> /products/:slug */
+export function routeShape(pathname?: string): string {
+  const p = pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+  return (
+    p
+      .replace(/\/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '/:id')
+      .replace(/^(\/(?:products?|services?|categories|category|insights?|articles?|reels?|shops?)\/)[^/]+.*$/i, '$1:slug')
+      .replace(/\/$/, '') || '/'
+  );
+}
+
+function inferResource(path: string): string {
+  const p = path.replace(/^\/+/, '');
+  if (p.startsWith('rest:') || p.startsWith('table:')) return p;
+  const head = p.split('/')[0];
+  return head || 'unknown';
+}
+
+function nextRequestId(): string {
+  try { return crypto.randomUUID().slice(0, 8); } catch { return Math.random().toString(36).slice(2, 10); }
+}
+
 export function recordTraffic(evt: TrafficEvent): void {
   try { recordBudgetEvent(evt.layer, evt.bytes, evt.path); } catch { /* never break a read */ }
+  if (!evt.requestId) evt.requestId = nextRequestId();
+  if (!evt.route) evt.route = routeShape();
+  if (!evt.resourceType) evt.resourceType = inferResource(evt.path);
+  if (evt.status === undefined) evt.status = 200;
+  try {
+    publishDelivery({
+      request_id: evt.requestId,
+      at: evt.at,
+      route: evt.route,
+      path: evt.path,
+      resource_type: evt.resourceType,
+      layer: evt.layer,
+      status: evt.status,
+      latency_ms: evt.ms,
+      bytes: Math.max(0, evt.bytes || 0),
+      database_used: evt.layer === 'db',
+      postgrest_used: evt.layer === 'db',
+      hit: evt.layer !== 'db',
+      miss_reason: evt.missReason,
+    });
+  } catch { /* telemetry must never break a read */ }
   layerCount[evt.layer] += 1;
   layerBytes[evt.layer] += Math.max(0, evt.bytes || 0);
 
@@ -192,3 +244,9 @@ export function getTrafficSnapshot(): TrafficSnapshot {
   return cachedSnapshot;
 }
 
+
+// Diagnostics hook: lets an operator (or an automated check) read the live
+// in-tab telemetry from the console without opening a dashboard.
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__P4NO_TRAFFIC__ = getTrafficSnapshot;
+}
