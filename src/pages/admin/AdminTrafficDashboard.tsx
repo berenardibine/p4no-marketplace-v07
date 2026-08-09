@@ -21,6 +21,7 @@ import {
 } from '@/lib/requestBudget';
 import { getPrefetchState } from '@/lib/prefetch';
 import { supabase } from '@/integrations/supabase/client';
+import LiveTelemetryPanel from '@/components/admin/LiveTelemetryPanel';
 
 const LAYER_ORDER: TrafficLayer[] = ['memory', 'browser', 'idb', 'cdn', 'db'];
 
@@ -150,6 +151,8 @@ export default function AdminTrafficDashboard() {
           </p>
         </CardContent>
       </Card>
+
+      <LiveTelemetryPanel />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Static files served" value={String(snap.staticFilesServed)} hint="memory + cache + CDN" icon={HardDrive} />

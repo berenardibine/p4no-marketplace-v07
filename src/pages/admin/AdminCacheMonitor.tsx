@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import LiveTelemetryPanel from "@/components/admin/LiveTelemetryPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { STATIC_CDN, isStrictStaticMode, setStrictStaticMode } from "@/lib/staticFlags";
 import { getGuardStats, subscribeGuardStats, repairIndexedDB } from "@/lib/cdnGuard";
@@ -626,6 +627,9 @@ export default function AdminCacheMonitor() {
             <HealthDot status={guardHealth as any} reason={`${trafficAgg.violations} violations`} /></div>
         </CardContent>
       </Card>
+
+      {/* Live delivery telemetry — event-driven, no polling, no DB reads */}
+      <LiveTelemetryPanel />
 
       {/* Tabs */}
       <Tabs defaultValue="traffic">

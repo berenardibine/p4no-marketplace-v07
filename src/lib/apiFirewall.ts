@@ -19,6 +19,7 @@ import { isStrictStaticMode } from './staticFlags';
 import { isPublicTable } from './publicReadGuard';
 import { markViolation } from './cdnGuard';
 import { disabledFeatureTables } from './featureFlags';
+import { recordTraffic, routeShape } from './trafficTelemetry';
 
 const REST_MARKER = '/rest/v1/';
 const POLLING_WINDOW_MS = 60_000;
@@ -121,6 +122,38 @@ export function installApiFirewall() {
       if (isRead) { stat.reads += 1; totalReads += 1; }
       else { stat.writes += 1; totalWrites += 1; }
       if (!res.ok) stat.errors += 1;
+
+      // REAL PostgREST accounting: every row this app READS from Supabase is a
+      // L5 database delivery event, no matter which hook issued it. Writes are
+      // mutations, not delivery, so they never pollute the cache-hit ratio.
+      if (isRead) {
+        try {
+          const header = Number(res.headers.get('content-length') ?? 0);
+          const emit = (bytes: number) =>
+            recordTraffic({
+              path: `rest:${table}`,
+              layer: 'db',
+              bytes,
+              ms,
+              at: Date.now(),
+              status: res.status,
+              route: routeShape(),
+              resourceType: `table:${table}`,
+              missReason: 'postgrest-read',
+            });
+          if (Number.isFinite(header) && header > 0) {
+            emit(header);
+          } else {
+            // Chunked responses omit content-length: measure the real payload
+            // from a clone so egress numbers are true, never estimated.
+            void res
+              .clone()
+              .arrayBuffer()
+              .then((buf) => emit(buf.byteLength))
+              .catch(() => emit(0));
+          }
+        } catch { /* ignore */ }
+      }
       return res;
     } catch (err) {
       stat.errors += 1;
