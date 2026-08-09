@@ -13,6 +13,8 @@
 //
 // Pure in-memory. Nothing here writes to the database.
 
+import { recordBudgetEvent } from './requestBudget';
+
 export type TrafficLayer = 'memory' | 'browser' | 'idb' | 'cdn' | 'db';
 
 export const LAYER_LABEL: Record<TrafficLayer, string> = {
@@ -73,6 +75,7 @@ export function subscribeTraffic(fn: () => void): () => void {
 }
 
 export function recordTraffic(evt: TrafficEvent): void {
+  try { recordBudgetEvent(evt.layer, evt.bytes, evt.path); } catch { /* never break a read */ }
   layerCount[evt.layer] += 1;
   layerBytes[evt.layer] += Math.max(0, evt.bytes || 0);
 
