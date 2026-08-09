@@ -156,7 +156,6 @@ export interface BudgetSnapshot {
 }
 
 let cached: BudgetSnapshot | null = null;
-const origNotify = notify;
 
 export function getBudgetSnapshot(): BudgetSnapshot {
   if (cached) return cached;
@@ -178,9 +177,5 @@ export function resetBudget(): void {
   visitDb = 0;
   visitTotal = 0;
   visitPaths.clear();
-  cached = null;
-  origNotify();
+  notify();
 }
-
-// Invalidate the memoised snapshot whenever anything changes.
-listeners.add(() => { cached = null; });
