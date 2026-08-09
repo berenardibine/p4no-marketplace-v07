@@ -19,7 +19,7 @@ import { getManifest } from './staticCDN';
 import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 import { recordTraffic } from './trafficTelemetry';
-import { guardFallback, markMissing, isKnownMissing } from './stampede';
+import { guardFallback, markMissing, isKnownMissing, clearMissing } from './stampede';
 
 
 // Exponential backoff for self-heal retries after 404.
@@ -541,7 +541,10 @@ export function isWarm(path: string): boolean {
 
 // Content changed upstream → drop L1 so the next read revalidates.
 if (typeof window !== 'undefined') {
-  window.addEventListener('p4no:manifest-updated', () => memory.clear());
+  window.addEventListener('p4no:manifest-updated', () => {
+    memory.clear();
+    clearMissing();
+  });
 }
 
 
