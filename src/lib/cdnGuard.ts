@@ -19,6 +19,7 @@ import { getManifest } from './staticCDN';
 import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 import { recordTraffic } from './trafficTelemetry';
+import { guardFallback, markMissing, isKnownMissing, clearMissing } from './stampede';
 
 
 // Exponential backoff for self-heal retries after 404.
@@ -463,8 +464,20 @@ async function runFallback<T>(path: string, fn?: () => Promise<T | null>): Promi
     recordTraffic({ path, layer: 'db', bytes: 0, ms: 0, at: Date.now(), missReason: 'no-static-no-fallback' });
     return null;
   }
+  // Stampede protection: one database fallback per path per cooldown window,
+  // concurrent callers share the same query, breaker opens after repeat failures.
+  if (isKnownMissing(path)) {
+    recordTraffic({ path, layer: 'memory', bytes: 0, ms: 0, at: Date.now(), missReason: 'negative-cache' });
+    return null;
+  }
   try {
-    const out = await fn();
+    const guarded = await guardFallback<T>(path, fn);
+    const out = guarded.value;
+    if (!guarded.allowed) {
+      recordTraffic({ path, layer: 'memory', bytes: 0, ms: 0, at: Date.now(), missReason: `fallback-${guarded.reason}` });
+      return out;
+    }
+    if (out === null || out === undefined) markMissing(path);
     record({
       path,
       source: 'supabase',
@@ -528,7 +541,10 @@ export function isWarm(path: string): boolean {
 
 // Content changed upstream → drop L1 so the next read revalidates.
 if (typeof window !== 'undefined') {
-  window.addEventListener('p4no:manifest-updated', () => memory.clear());
+  window.addEventListener('p4no:manifest-updated', () => {
+    memory.clear();
+    clearMissing();
+  });
 }
 
 

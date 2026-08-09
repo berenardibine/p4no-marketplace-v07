@@ -8,6 +8,7 @@
 import { STATIC_CDN } from './staticFlags';
 import { idbGet, idbPut, idbDelete, idbBulkPrune, idbKeys } from './idbCache';
 import { supabase } from '@/integrations/supabase/client';
+import { coalesce, markMissing, isKnownMissing, clearMissing } from './stampede';
 
 interface Envelope<T> {
   v: number;
@@ -151,6 +152,14 @@ export async function getStatic<T = unknown>(path: string): Promise<T | null> {
   if (!STATIC_CDN.base) return null;
 
   const cleanPath = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  // Confirmed-missing resources are remembered briefly so a bad path cannot be
+  // re-requested thousands of times.
+  if (isKnownMissing(cleanPath)) return null;
+  // One origin fetch per path, no matter how many callers ask at once.
+  return coalesce(`static:${cleanPath}`, () => fetchStatic<T>(cleanPath));
+}
+
+async function fetchStatic<T>(cleanPath: string): Promise<T | null> {
   const manifest = await getManifest();
   const expectedVersion = manifest?.entities?.[cleanPath] ?? 0;
 
@@ -181,6 +190,7 @@ export async function getStatic<T = unknown>(path: string): Promise<T | null> {
         } catch { /* ignore */ }
       }
       if (cached) return (cached.data as unknown as Envelope<T>).data ?? (cached.data as unknown as T);
+      markMissing(cleanPath);
       return null;
     }
     if (!res.ok) {
@@ -189,6 +199,7 @@ export async function getStatic<T = unknown>(path: string): Promise<T | null> {
     }
     const env = (await res.json()) as Envelope<T>;
     await idbPut(cleanPath, env, env.v ?? expectedVersion ?? Date.now());
+    clearMissing(cleanPath);
     return env.data;
   } catch {
     if (cached) return (cached.data as unknown as Envelope<T>).data ?? (cached.data as unknown as T);

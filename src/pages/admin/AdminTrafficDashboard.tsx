@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Activity, Database, Gauge, HardDrive, RefreshCw, Rocket, Zap } from 'lucide-react';
+import { Activity, AlertTriangle, Database, Gauge, HardDrive, RefreshCw, Rocket, Shield, Zap } from 'lucide-react';
 import {
   LAYER_LABEL,
   getTrafficSnapshot,
@@ -11,6 +11,14 @@ import {
   subscribeTraffic,
   type TrafficLayer,
 } from '@/lib/trafficTelemetry';
+import { getStampedeStats, resetStampedeStats, subscribeStampede } from '@/lib/stampede';
+import {
+  DEFAULT_DB_BUDGET,
+  DEFAULT_TOTAL_BUDGET,
+  getBudgetSnapshot,
+  resetBudget,
+  subscribeBudget,
+} from '@/lib/requestBudget';
 import { getPrefetchState } from '@/lib/prefetch';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -40,8 +48,21 @@ function Stat({ label, value, hint, icon: Icon }: { label: string; value: string
   );
 }
 
+function MiniStat({ label, value, tone }: { label: string; value: number; tone: 'good' | 'warn' }) {
+  return (
+    <div className="rounded-md border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-xl font-semibold tabular-nums ${tone === 'warn' && value > 0 ? 'text-destructive' : ''}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminTrafficDashboard() {
   const snap = useSyncExternalStore(subscribeTraffic, getTrafficSnapshot, getTrafficSnapshot);
+  const budget = useSyncExternalStore(subscribeBudget, getBudgetSnapshot, getBudgetSnapshot);
+  const stampede = useSyncExternalStore(subscribeStampede, getStampedeStats, getStampedeStats);
   const [prefetch, setPrefetch] = useState(getPrefetchState());
   const [gen, setGen] = useState<any>(null);
   const [loadingGen, setLoadingGen] = useState(false);
@@ -87,7 +108,11 @@ export default function AdminTrafficDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => resetTraffic()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => { resetTraffic(); resetBudget(); resetStampedeStats(); }}
+          >
             Reset counters
           </Button>
           <Button size="sm" onClick={loadGenerator} disabled={loadingGen}>
@@ -189,6 +214,84 @@ export default function AdminTrafficDashboard() {
               {JSON.stringify(gen, null, 2)}
             </pre>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-4 w-4" /> Stampede protection
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <MiniStat label="Coalesced requests" value={stampede.coalesced} tone="good" />
+            <MiniStat label="Negative-cache hits" value={stampede.negativeHits} tone="good" />
+            <MiniStat label="Fallbacks allowed" value={stampede.fallbacksAllowed} tone="warn" />
+            <MiniStat label="Fallbacks suppressed" value={stampede.fallbacksSuppressed} tone="good" />
+            <MiniStat label="Breaker blocks" value={stampede.breakerOpen} tone="warn" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Concurrent readers of the same resource share one origin request. Confirmed-missing
+            paths are cached negatively, and each path allows at most one database fallback per
+            30s window before the circuit breaker opens.
+            {stampede.openBreakers.length > 0 && (
+              <> Open breakers: <span className="font-mono">{stampede.openBreakers.join(', ')}</span>.</>
+            )}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Gauge className="h-4 w-4" /> Request budget per page
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Budget: max {DEFAULT_DB_BUDGET} database reads and {DEFAULT_TOTAL_BUDGET} total reads
+            per page view. Current page <span className="font-mono">{budget.currentRoute}</span> —{' '}
+            {budget.visitDb} DB / {budget.visitTotal} total.
+          </p>
+          {budget.routes.length === 0 && (
+            <p className="text-sm text-muted-foreground">No page views recorded yet.</p>
+          )}
+          {budget.routes.map((r) => (
+            <div key={r.route} className="flex items-center justify-between gap-2 text-sm">
+              <span className="truncate font-mono text-xs">{r.route}</span>
+              <span className="flex shrink-0 items-center gap-2">
+                <Badge variant="secondary">{r.visits} views</Badge>
+                <Badge variant="outline">{r.total} reads</Badge>
+                {r.db > 0 ? <Badge variant="destructive">{r.db} DB</Badge> : <Badge variant="outline">0 DB</Badge>}
+                {r.breaches > 0 && <Badge variant="destructive">{r.breaches} over budget</Badge>}
+                <span className="text-xs text-muted-foreground">{fmtBytes(r.bytes)}</span>
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AlertTriangle className="h-4 w-4" /> Traffic anomalies
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          {budget.alerts.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No budget breaches, N+1 patterns, or abnormal page traffic detected.
+            </p>
+          )}
+          {budget.alerts.map((a, i) => (
+            <div key={`${a.route}-${a.kind}-${i}`} className="flex items-start justify-between gap-2 text-xs">
+              <span className="truncate">
+                <span className="font-mono">{a.route}</span> — {a.note}
+              </span>
+              <Badge variant="destructive" className="shrink-0">{a.kind}</Badge>
+            </div>
+          ))}
         </CardContent>
       </Card>
 
