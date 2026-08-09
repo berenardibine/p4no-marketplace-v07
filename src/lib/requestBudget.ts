@@ -50,6 +50,7 @@ const visitPaths = new Map<string, number>();
 
 const listeners = new Set<() => void>();
 function notify() {
+  cached = null;
   listeners.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
 }
 
