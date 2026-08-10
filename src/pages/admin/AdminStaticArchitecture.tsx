@@ -224,7 +224,10 @@ export default function AdminStaticArchitecture() {
           {[
             { label: "Browser (IndexedDB)", key: "browser", value: totals.browser, share: idbHit },
             { label: "CDN", key: "cdn", value: totals.cdn, share: cdnHit },
-            { label: "Blob (self-heal)", key: "blob", value: totals.blob, share: pct(totals.blob, total) },
+            // Vercel Blob is no longer part of the architecture; legacy rows
+            // with source="blob" are shown as what they really are today.
+            { label: "CDN origin (legacy)", key: "blob", value: totals.blob, share: pct(totals.blob, total) },
+
             { label: "Supabase (fallback)", key: "supabase", value: totals.supabase, share: dbShare },
           ].map((row) => (
             <div key={row.key} className="flex items-center gap-3">
