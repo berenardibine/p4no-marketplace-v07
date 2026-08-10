@@ -58,6 +58,7 @@ export function getStampedeStats(): StampedeSnapshot {
       .filter(([, b]) => b.openUntil > Date.now())
       .map(([k]) => k),
   };
+  return cachedStats;
 }
 
 export function resetStampedeStats(): void {
