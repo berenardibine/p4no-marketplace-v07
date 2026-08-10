@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import LiveTelemetryPanel from "@/components/admin/LiveTelemetryPanel";
+import RequestBudgetPanel from "@/components/admin/RequestBudgetPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { STATIC_CDN, isStrictStaticMode, setStrictStaticMode } from "@/lib/staticFlags";
 import { getGuardStats, subscribeGuardStats, repairIndexedDB } from "@/lib/cdnGuard";
@@ -648,8 +649,12 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="infra"><Server className="h-3.5 w-3.5 mr-1" />Infrastructure Audit</TabsTrigger>
           <TabsTrigger value="sblogs"><Database className="h-3.5 w-3.5 mr-1" />Supabase Logs</TabsTrigger>
           <TabsTrigger value="dedup"><Layers className="h-3.5 w-3.5 mr-1" />Dedup</TabsTrigger>
+          <TabsTrigger value="budget"><Activity className="h-3.5 w-3.5 mr-1" />Budget &amp; Stampede</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="budget" className="mt-4">
+          <RequestBudgetPanel />
+        </TabsContent>
         <TabsContent value="dedup" className="mt-4">
           <GeneratorDedupPanel />
         </TabsContent>
