@@ -22,7 +22,7 @@ export const useFavoriteProducts = () => {
     
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('product_likes')
         .select(`
           product_id,
@@ -49,7 +49,7 @@ export const useFavoriteProducts = () => {
     if (!user) return;
 
     try {
-      await supabase
+      await (supabase as any)
         .from('product_likes')
         .delete()
         .eq('user_id', user.id)
