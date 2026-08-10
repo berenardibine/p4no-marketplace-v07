@@ -557,12 +557,13 @@ export default function AdminCacheMonitor() {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold flex items-center gap-2">
             <Cloud className="h-6 w-6 text-primary" />
-            Cache Monitor
+            Unified Traffic &amp; Cache Monitor
             <Badge variant="secondary" className="text-[10px] font-normal">Enterprise</Badge>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Supabase → Static Generator → Vercel static deployment (CDN) → Browser HTTP cache → IndexedDB
+            Single source of truth. Supabase → Static Generator → Vercel static deployment (CDN) → Browser HTTP cache → IndexedDB
           </p>
+
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => exportReport("csv")}>
