@@ -27,7 +27,19 @@ const counters: StampedeCounters = {
 };
 
 const listeners = new Set<() => void>();
+
+// useSyncExternalStore requires a STABLE snapshot reference between changes.
+// Returning a fresh object on every getSnapshot() call made React re-render
+// forever → "Minified React error #185" (maximum update depth exceeded).
+type StampedeSnapshot = StampedeCounters & {
+  negativeSize: number;
+  inFlight: number;
+  openBreakers: string[];
+};
+let cachedStats: StampedeSnapshot | null = null;
+
 function notify() {
+  cachedStats = null;
   listeners.forEach((fn) => { try { fn(); } catch { /* ignore */ } });
 }
 
@@ -36,8 +48,9 @@ export function subscribeStampede(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
-export function getStampedeStats(): StampedeCounters & { negativeSize: number; inFlight: number; openBreakers: string[] } {
-  return {
+export function getStampedeStats(): StampedeSnapshot {
+  if (cachedStats) return cachedStats;
+  cachedStats = {
     ...counters,
     negativeSize: negative.size,
     inFlight: inFlight.size,
