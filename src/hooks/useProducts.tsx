@@ -307,7 +307,7 @@ export const useFavorites = () => {
     if (!user) return;
     
     try {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('product_likes')
         .select('product_id')
         .eq('user_id', user.id);
@@ -326,14 +326,14 @@ export const useFavorites = () => {
     const isFavorite = favorites.includes(productId);
     
     if (isFavorite) {
-      await supabase
+      await (supabase as any)
         .from('product_likes')
         .delete()
         .eq('user_id', user.id)
         .eq('product_id', productId);
       setFavorites(prev => prev.filter(id => id !== productId));
     } else {
-      await supabase
+      await (supabase as any)
         .from('product_likes')
         .insert({ user_id: user.id, product_id: productId });
       setFavorites(prev => [...prev, productId]);

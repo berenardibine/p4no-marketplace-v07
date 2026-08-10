@@ -14,7 +14,28 @@
 // Pure in-memory. Nothing here writes to the database.
 
 import { recordBudgetEvent } from './requestBudget';
-import { publishDelivery } from './telemetryBus';
+import { publishDelivery, type MonitorSource } from './telemetryBus';
+
+/**
+ * Classify WHO caused a read. PUBLIC / ADMIN / SYSTEM must never be mixed:
+ *  • admin  — any read issued while an /admin route is mounted (includes the
+ *             monitoring dashboards themselves, so they can never inflate the
+ *             public cache-hit ratio).
+ *  • system — background work: generators, cron, warming, health, telemetry.
+ *  • public — everything a real visitor triggers on the public site.
+ */
+export function classifySource(path: string, explicit?: MonitorSource): MonitorSource {
+  if (explicit) return explicit;
+  const p = (path || '').toLowerCase();
+  if (
+    /(static-(generate|worker|warm|health|manifest|integrity|consistency|rebuild|queue))/.test(p) ||
+    /(cron|generation_queue|generation_metrics|static_gen_log|static_manifest|loop_guard|cdn_metrics|system_logs)/.test(p)
+  ) {
+    return 'system';
+  }
+  if (typeof window !== 'undefined' && /^\/admin(\/|$)/.test(window.location.pathname)) return 'admin';
+  return 'public';
+}
 
 export type TrafficLayer = 'memory' | 'browser' | 'idb' | 'cdn' | 'db';
 
@@ -28,6 +49,8 @@ export const LAYER_LABEL: Record<TrafficLayer, string> = {
 
 export interface TrafficEvent {
   path: string;
+  /** Optional override; otherwise derived by classifySource(). */
+  source?: MonitorSource;
   layer: TrafficLayer;
   bytes: number;
   ms: number;
@@ -126,6 +149,7 @@ export function recordTraffic(evt: TrafficEvent): void {
       postgrest_used: evt.layer === 'db',
       hit: evt.layer !== 'db',
       miss_reason: evt.missReason,
+      source: classifySource(evt.path, evt.source),
     });
   } catch { /* telemetry must never break a read */ }
   layerCount[evt.layer] += 1;

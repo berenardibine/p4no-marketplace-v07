@@ -12,8 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, AlertTriangle, Database, FlaskConical, Gauge, Radio } from 'lucide-react';
-import { LAYERS, LAYER_META, useLiveTelemetry } from '@/hooks/useLiveTelemetry';
+import { Activity, AlertTriangle, Copy, Database, FlaskConical, Gauge, Radio, Users } from 'lucide-react';
+import { LAYERS, LAYER_META, SOURCES, useLiveTelemetry } from '@/hooks/useLiveTelemetry';
 import { getContent } from '@/lib/cdnGuard';
 import { getPublisherStats } from '@/lib/telemetryBus';
 
@@ -49,6 +49,10 @@ export default function LiveTelemetryPanel() {
   const [testMsg, setTestMsg] = useState<string | null>(null);
 
   const hasTraffic = t.requests > 0;
+  // "—" is only honest when the pipeline is degraded; a connected channel with
+  // no events is a MEASURED zero and must be shown as such.
+  const unavailable = t.status !== 'live';
+  const na = (v: string) => (unavailable ? 'Telemetry unavailable' : v);
   const staleMs = t.lastEventAt ? Date.now() - t.lastEventAt : null;
   const preventedReads = t.requests - t.dbFallbacks;
   const savedBytes = preventedReads * AVG_DB_PAYLOAD_BYTES;
@@ -128,14 +132,14 @@ export default function LiveTelemetryPanel() {
 
       {/* Executive overview */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="Requests (live)" value={hasTraffic ? t.requests.toLocaleString() : '—'} source="Delivery telemetry" hint={hasTraffic ? undefined : 'No traffic detected'} />
-        <Metric label="Cache hit ratio" value={hasTraffic ? `${hitRatio.toFixed(1)}%` : '—'} source="Delivery telemetry" hint={`${t.cacheHits.toLocaleString()} hits`} />
-        <Metric label="Database fallback ratio" value={hasTraffic ? `${dbRatio.toFixed(1)}%` : '—'} source="PostgREST telemetry" hint={`${t.dbFallbacks.toLocaleString()} reads`} />
-        <Metric label="PostgREST egress" value={hasTraffic ? fmtBytes(t.postgrestBytes) : '—'} source="PostgREST telemetry" />
-        <Metric label="DB reads prevented" value={hasTraffic ? preventedReads.toLocaleString() : '—'} source="Delivery telemetry" />
-        <Metric label="Est. egress saved" value={hasTraffic ? fmtBytes(savedBytes) : '—'} source="Delivery telemetry (modelled)" />
-        <Metric label="Est. cost saved" value={hasTraffic ? `$${savedUsd.toFixed(4)}` : '—'} source="Delivery telemetry (modelled)" hint={`@ $${EGRESS_USD_PER_GB}/GB`} />
-        <Metric label="Latency avg / p95" value={hasTraffic ? `${t.avgMs} / ${t.p95Ms} ms` : '—'} source="Delivery telemetry" />
+        <Metric label="Requests (live)" value={na(t.requests.toLocaleString())} source="Delivery telemetry" hint={hasTraffic ? undefined : 'No traffic detected'} />
+        <Metric label="Cache hit ratio" value={na(hasTraffic ? `${hitRatio.toFixed(1)}%` : '0.0%')} source="Delivery telemetry" hint={`${t.cacheHits.toLocaleString()} hits`} />
+        <Metric label="Database fallback ratio" value={na(hasTraffic ? `${dbRatio.toFixed(1)}%` : '0.0%')} source="PostgREST telemetry" hint={`${t.dbFallbacks.toLocaleString()} reads`} />
+        <Metric label="PostgREST egress" value={na(fmtBytes(t.postgrestBytes))} source="PostgREST telemetry" />
+        <Metric label="DB reads prevented" value={na(String(Math.max(0, preventedReads)))} source="Delivery telemetry" />
+        <Metric label="Est. egress saved" value={na(fmtBytes(savedBytes))} source="Delivery telemetry (modelled)" />
+        <Metric label="Est. cost saved" value={na(`$${savedUsd.toFixed(4)}`)} source="Delivery telemetry (modelled)" hint={`@ $${EGRESS_USD_PER_GB}/GB`} />
+        <Metric label="Latency avg / p95" value={na(`${t.avgMs} / ${t.p95Ms} ms`)} source="Delivery telemetry" />
       </div>
 
       {/* Cache hierarchy */}
@@ -214,6 +218,81 @@ export default function LiveTelemetryPanel() {
         </Card>
       </div>
 
+
+      {/* Source split — PUBLIC / ADMIN / SYSTEM are never mixed */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-4 w-4" /> Traffic &amp; egress by source
+            <span className="ml-auto text-[10px] font-normal uppercase text-muted-foreground">Source: delivery telemetry</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!hasTraffic ? (
+            <div className="text-xs text-muted-foreground">
+              {t.status === 'live'
+                ? 'No traffic detected yet — this is a measured zero.'
+                : 'Telemetry unavailable — the monitor is not connected to the delivery channel.'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead><TableHead>Requests</TableHead><TableHead>Share</TableHead>
+                  <TableHead>DB reads</TableHead><TableHead>Total bytes</TableHead><TableHead>PostgREST egress</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {SOURCES.map((src) => {
+                  const a = t.bySource[src];
+                  const share = t.requests ? (a.requests / t.requests) * 100 : 0;
+                  return (
+                    <TableRow key={src}>
+                      <TableCell className="text-[11px] font-medium uppercase">{src}</TableCell>
+                      <TableCell className="text-[11px] tabular-nums">{a.requests.toLocaleString()}</TableCell>
+                      <TableCell className="text-[11px] tabular-nums">{share.toFixed(1)}%</TableCell>
+                      <TableCell className={`text-[11px] tabular-nums ${a.db > 0 ? 'text-destructive' : ''}`}>{a.db.toLocaleString()}</TableCell>
+                      <TableCell className="text-[11px] tabular-nums">{fmtBytes(a.bytes)}</TableCell>
+                      <TableCell className="text-[11px] tabular-nums">{fmtBytes(a.db_bytes)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+          <p className="pt-2 text-[11px] text-muted-foreground">
+            Admin pages (including this monitor) are classified ADMIN and can never inflate the public cache-hit ratio.
+            Generators, cron and warming jobs are classified SYSTEM.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Duplicate / repetition detection */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Copy className="h-4 w-4" /> Repeated request detection
+            <span className="ml-auto text-[10px] font-normal uppercase text-muted-foreground">Admin &amp; system only</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1 text-xs">
+          {t.duplicates.length === 0 && (
+            <div className="text-muted-foreground">
+              No repeated admin/system request patterns flagged. Public traffic is never flagged.
+            </div>
+          )}
+          {t.duplicates.map((d) => (
+            <div key={d.key} className="flex items-center justify-between gap-2 border-b py-1">
+              <span className="truncate font-mono">{d.key}</span>
+              <span className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] uppercase">{d.source}</Badge>
+                <Badge variant="destructive" className="text-[10px]">POSSIBLE DUPLICATE ×{d.count}</Badge>
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       {/* Live request inspector */}
       <Card>
         <CardHeader className="pb-2">
@@ -226,7 +305,7 @@ export default function LiveTelemetryPanel() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Time</TableHead><TableHead>Request</TableHead><TableHead>Route</TableHead>
+                <TableHead>Time</TableHead><TableHead>Source</TableHead><TableHead>Request</TableHead><TableHead>Route</TableHead>
                 <TableHead>Resource</TableHead><TableHead>Layer</TableHead><TableHead>Status</TableHead>
                 <TableHead>Latency</TableHead><TableHead>DB</TableHead><TableHead>PostgREST</TableHead>
                 <TableHead>Bytes</TableHead><TableHead>Cache</TableHead>
@@ -236,6 +315,9 @@ export default function LiveTelemetryPanel() {
               {t.samples.map((s) => (
                 <TableRow key={s.request_id + s.at}>
                   <TableCell className="whitespace-nowrap text-[11px]">{new Date(s.at).toLocaleTimeString()}</TableCell>
+                  <TableCell className="text-[11px]">
+                    <Badge variant={s.source === 'public' ? 'default' : 'outline'} className="text-[10px] uppercase">{s.source}</Badge>
+                  </TableCell>
                   <TableCell className="font-mono text-[11px]">{s.request_id}</TableCell>
                   <TableCell className="max-w-[160px] truncate font-mono text-[11px]">{s.route}</TableCell>
                   <TableCell className="max-w-[160px] truncate text-[11px]">{s.resource_type}</TableCell>
@@ -251,7 +333,7 @@ export default function LiveTelemetryPanel() {
                 </TableRow>
               ))}
               {t.samples.length === 0 && (
-                <TableRow><TableCell colSpan={11} className="text-xs text-muted-foreground">No traffic detected — waiting for real delivery events.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-xs text-muted-foreground">No traffic detected — waiting for real delivery events.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

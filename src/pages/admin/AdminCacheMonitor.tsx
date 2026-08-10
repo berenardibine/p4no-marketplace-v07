@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import LiveTelemetryPanel from "@/components/admin/LiveTelemetryPanel";
+import RequestBudgetPanel from "@/components/admin/RequestBudgetPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { STATIC_CDN, isStrictStaticMode, setStrictStaticMode } from "@/lib/staticFlags";
 import { getGuardStats, subscribeGuardStats, repairIndexedDB } from "@/lib/cdnGuard";
@@ -556,12 +557,13 @@ export default function AdminCacheMonitor() {
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold flex items-center gap-2">
             <Cloud className="h-6 w-6 text-primary" />
-            Cache Monitor
+            Unified Traffic &amp; Cache Monitor
             <Badge variant="secondary" className="text-[10px] font-normal">Enterprise</Badge>
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Supabase → Static Generator → Vercel static deployment (CDN) → Browser HTTP cache → IndexedDB
+            Single source of truth. Supabase → Static Generator → Vercel static deployment (CDN) → Browser HTTP cache → IndexedDB
           </p>
+
         </div>
         <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => exportReport("csv")}>
@@ -648,8 +650,12 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="infra"><Server className="h-3.5 w-3.5 mr-1" />Infrastructure Audit</TabsTrigger>
           <TabsTrigger value="sblogs"><Database className="h-3.5 w-3.5 mr-1" />Supabase Logs</TabsTrigger>
           <TabsTrigger value="dedup"><Layers className="h-3.5 w-3.5 mr-1" />Dedup</TabsTrigger>
+          <TabsTrigger value="budget"><Activity className="h-3.5 w-3.5 mr-1" />Budget &amp; Stampede</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="budget" className="mt-4">
+          <RequestBudgetPanel />
+        </TabsContent>
         <TabsContent value="dedup" className="mt-4">
           <GeneratorDedupPanel />
         </TabsContent>

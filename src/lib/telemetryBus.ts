@@ -31,6 +31,16 @@ const MAX_SAMPLES = 12;
 
 export type MonitorLayer = 'memory' | 'browser' | 'idb' | 'cdn' | 'db';
 
+/** Who caused the request. PUBLIC / ADMIN / SYSTEM are never mixed. */
+export type MonitorSource = 'public' | 'admin' | 'system';
+
+export interface SourceAgg {
+  requests: number;
+  bytes: number;
+  db: number;
+  db_bytes: number;
+}
+
 export interface DeliverySample {
   request_id: string;
   at: number;
@@ -45,6 +55,7 @@ export interface DeliverySample {
   postgrest_used: boolean;
   hit: boolean;
   miss_reason?: string;
+  source: MonitorSource;
 }
 
 export interface TrafficSnapshotMessage {
@@ -63,6 +74,7 @@ export interface TrafficSnapshotMessage {
   latencies: number[];
   routes: Record<string, number>;
   miss_reasons: Record<string, number>;
+  by_source: Record<MonitorSource, SourceAgg>;
   samples: DeliverySample[];
 }
 
@@ -79,6 +91,12 @@ function makeId(): string {
 export const TELEMETRY_SESSION = makeId();
 
 // -------------------- publisher --------------------
+
+const emptySources = (): Record<MonitorSource, SourceAgg> => ({
+  public: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+  admin: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+  system: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+});
 
 const emptyLayers = (): Record<MonitorLayer, number> => ({
   memory: 0,
@@ -100,6 +118,7 @@ let pending = {
   latencies: [] as number[],
   routes: {} as Record<string, number>,
   miss_reasons: {} as Record<string, number>,
+  by_source: emptySources(),
   samples: [] as DeliverySample[],
   windowStart: Date.now(),
 };
@@ -117,6 +136,7 @@ function resetPending() {
     latencies: [],
     routes: {},
     miss_reasons: {},
+    by_source: emptySources(),
     samples: [],
     windowStart: Date.now(),
   };
@@ -151,6 +171,7 @@ function ensureChannel(): RealtimeChannel {
     });
   }).subscribe((status) => {
     pubReady = status === 'SUBSCRIBED';
+    if (pubReady) drainOutbox();
     const mapped: 'connecting' | 'live' | 'error' =
       pubReady ? 'live' : status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED' ? 'error' : 'connecting';
     statusWatchers.forEach((fn) => {
@@ -158,6 +179,26 @@ function ensureChannel(): RealtimeChannel {
     });
   });
   return ch;
+}
+
+// A channel only accepts sends once it reaches SUBSCRIBED. The very first
+// batch of a visitor session used to be emitted while the socket was still
+// joining and was silently lost — which is why admin monitors saw nothing from
+// real public sessions. Queue instead, and drain on SUBSCRIBED.
+const outbox: TrafficSnapshotMessage[] = [];
+const MAX_OUTBOX = 20;
+
+function drainOutbox() {
+  if (!pubChannel || !pubReady) return;
+  while (outbox.length) {
+    const msg = outbox.shift()!;
+    try {
+      void pubChannel.send({ type: 'broadcast', event: EVENT, payload: msg });
+      sent += 1;
+    } catch {
+      dropped += 1;
+    }
+  }
 }
 
 function armIdleDisconnect() {
@@ -194,17 +235,18 @@ function flush() {
     latencies: pending.latencies.slice(0, 200),
     routes: pending.routes,
     miss_reasons: pending.miss_reasons,
+    by_source: pending.by_source,
     samples: pending.samples.slice(0, MAX_SAMPLES),
   };
   resetPending();
 
-  try {
-    const ch = ensureChannel();
-    void ch.send({ type: 'broadcast', event: EVENT, payload: msg });
-    sent += 1;
-  } catch {
+  outbox.push(msg);
+  if (outbox.length > MAX_OUTBOX) {
+    outbox.splice(0, outbox.length - MAX_OUTBOX);
     dropped += 1;
   }
+  ensureChannel();
+  drainOutbox();
   armIdleDisconnect();
 }
 
@@ -224,14 +266,32 @@ export function publishDelivery(s: DeliverySample): void {
   if (s.miss_reason) {
     pending.miss_reasons[s.miss_reason] = (pending.miss_reasons[s.miss_reason] ?? 0) + 1;
   }
+  const src = pending.by_source[s.source] ?? pending.by_source.public;
+  src.requests += 1;
+  src.bytes += Math.max(0, s.bytes || 0);
+  if (s.database_used) {
+    src.db += 1;
+    src.db_bytes += Math.max(0, s.bytes || 0);
+  }
   if (pending.samples.length < MAX_SAMPLES) pending.samples.push(s);
 
   // No polling: one timer per batch window, created by real traffic only.
-  if (!flushTimer) flushTimer = setTimeout(flush, FLUSH_MS);
+  if (!flushTimer) {
+    // Warm the socket now so it is SUBSCRIBED by the time the window closes.
+    try { ensureChannel(); } catch { /* ignore */ }
+    flushTimer = setTimeout(flush, FLUSH_MS);
+  }
 }
 
 export function getPublisherStats() {
-  return { session: TELEMETRY_SESSION, connected: pubReady, sent, dropped, pending: pending.requests };
+  return {
+    session: TELEMETRY_SESSION,
+    connected: pubReady,
+    sent,
+    dropped,
+    queued: outbox.length,
+    pending: pending.requests,
+  };
 }
 
 if (typeof window !== 'undefined') {
