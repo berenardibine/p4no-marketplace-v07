@@ -7,8 +7,18 @@ import {
   subscribeMonitor,
   type DeliverySample,
   type MonitorLayer,
+  type MonitorSource,
+  type SourceAgg,
   type TrafficSnapshotMessage,
 } from '@/lib/telemetryBus';
+
+export const SOURCES: MonitorSource[] = ['public', 'admin', 'system'];
+
+const emptySources = (): Record<MonitorSource, SourceAgg> => ({
+  public: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+  admin: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+  system: { requests: 0, bytes: 0, db: 0, db_bytes: 0 },
+});
 
 export const LAYERS: MonitorLayer[] = ['memory', 'browser', 'idb', 'cdn', 'db'];
 
@@ -36,6 +46,8 @@ export interface LiveTelemetryState {
   missReasons: { reason: string; count: number }[];
   samples: DeliverySample[];
   fallbacks: DeliverySample[];
+  bySource: Record<MonitorSource, SourceAgg>;
+  duplicates: { key: string; count: number; source: MonitorSource }[];
   sessions: number;
   eventsReceived: number;
   lastEventAt: number | null;
@@ -57,6 +69,8 @@ const initial = (): LiveTelemetryState => ({
   missReasons: [],
   samples: [],
   fallbacks: [],
+  bySource: emptySources(),
+  duplicates: [],
   sessions: 0,
   eventsReceived: 0,
   lastEventAt: null,
@@ -70,9 +84,12 @@ export function useLiveTelemetry() {
   const routeMap = useRef(new Map<string, number>());
   const missMap = useRef(new Map<string, number>());
   const sessions = useRef(new Set<string>());
+  // Repetition detector: counts identical route+source pairs seen in the feed.
+  const repeats = useRef(new Map<string, { count: number; source: MonitorSource }>());
 
   const reset = useCallback(() => {
     latencies.current = [];
+    repeats.current.clear();
     routeMap.current.clear();
     missMap.current.clear();
     sessions.current.clear();
@@ -87,6 +104,12 @@ export function useLiveTelemetry() {
       }
       for (const [r, c] of Object.entries(msg.miss_reasons ?? {})) {
         missMap.current.set(r, (missMap.current.get(r) ?? 0) + c);
+      }
+      for (const s of msg.samples ?? []) {
+        const key = `${s.source}:${s.route}`;
+        const cur = repeats.current.get(key);
+        if (cur) cur.count += 1;
+        else repeats.current.set(key, { count: 1, source: s.source });
       }
       latencies.current.push(...(msg.latencies ?? []));
       if (latencies.current.length > 5000) latencies.current = latencies.current.slice(-5000);
@@ -105,6 +128,17 @@ export function useLiveTelemetry() {
           layerMs[l] += msg.layer_ms?.[l] ?? 0;
         }
         const newSamples = [...(msg.samples ?? [])].reverse();
+        const bySource = emptySources();
+        for (const key of SOURCES) {
+          const prevS = prev.bySource[key];
+          const add = msg.by_source?.[key];
+          bySource[key] = {
+            requests: prevS.requests + (add?.requests ?? 0),
+            bytes: prevS.bytes + (add?.bytes ?? 0),
+            db: prevS.db + (add?.db ?? 0),
+            db_bytes: prevS.db_bytes + (add?.db_bytes ?? 0),
+          };
+        }
         return {
           ...prev,
           requests: prev.requests + msg.requests,
@@ -125,6 +159,12 @@ export function useLiveTelemetry() {
             .slice(0, 10),
           samples: [...newSamples, ...prev.samples].slice(0, 60),
           fallbacks: [...newSamples.filter((s) => s.database_used), ...prev.fallbacks].slice(0, 25),
+          bySource,
+          duplicates: [...repeats.current.entries()]
+            .filter(([, v]) => v.count >= 5 && v.source !== 'public')
+            .map(([key, v]) => ({ key, count: v.count, source: v.source }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10),
           sessions: sessions.current.size,
           eventsReceived: prev.eventsReceived + 1,
           lastEventAt: Date.now(),
