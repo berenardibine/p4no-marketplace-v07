@@ -5,7 +5,6 @@ import { Crown, MapPin, Star, BadgeCheck } from "lucide-react";
 import { useProductTracking } from "@/hooks/useProductTracking";
 import DiscountCountdown from "@/components/discount/DiscountCountdown";
 import { hasActiveDiscount, getDiscountedPrice } from "@/lib/discount";
-import { useAuthAction } from "@/hooks/useAuth";
 
 interface FloatingProductCardProps {
   id: string;
@@ -66,7 +65,6 @@ const FloatingProductCard = ({
   const [imageLoaded, setImageLoaded] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const { trackElement, recordView } = useProductTracking();
-  const { withAuth } = useAuthAction();
 
   useEffect(() => {
     if (cardRef.current && id) {
