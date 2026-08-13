@@ -1,11 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Crown, Heart, MapPin, Star, BadgeCheck } from "lucide-react";
+import { Crown, MapPin, Star, BadgeCheck } from "lucide-react";
 import { useProductTracking } from "@/hooks/useProductTracking";
 import DiscountCountdown from "@/components/discount/DiscountCountdown";
 import { hasActiveDiscount, getDiscountedPrice } from "@/lib/discount";
-import { useFavorites } from "@/hooks/useProducts";
 import { useAuthAction } from "@/hooks/useAuth";
 
 interface FloatingProductCardProps {
@@ -65,12 +64,9 @@ const FloatingProductCard = ({
 }: FloatingProductCardProps) => {
   const navigate = useNavigate();
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [heartPop, setHeartPop] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const { trackElement, recordView } = useProductTracking();
-  const { isFavorite, toggleFavorite } = useFavorites();
   const { withAuth } = useAuthAction();
-  const favorite = isFavorite(id);
 
   useEffect(() => {
     if (cardRef.current && id) {
@@ -87,15 +83,6 @@ const FloatingProductCard = ({
   const handleClick = () => {
     recordView(id, refSource);
     navigate(`/product/${slug || id}`);
-  };
-
-  const handleFavorite = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    withAuth(() => {
-      setHeartPop(true);
-      toggleFavorite(id);
-      setTimeout(() => setHeartPop(false), 350);
-    });
   };
 
   const productImage = images?.[0] || "/placeholder.svg";
@@ -200,27 +187,6 @@ const FloatingProductCard = ({
           )}
         </div>
 
-        {/* Wishlist (top-right) */}
-        <button
-          type="button"
-          aria-label={favorite ? "Remove from wishlist" : "Add to wishlist"}
-          onClick={handleFavorite}
-          className={cn(
-            "absolute top-2 right-2 z-10",
-            "w-9 h-9 rounded-full flex items-center justify-center",
-            "bg-white/95 backdrop-blur-sm border border-black/5 shadow-sm",
-            "transition-all duration-200 active:scale-90",
-            "hover:shadow-md"
-          )}
-        >
-          <Heart
-            className={cn(
-              "h-[18px] w-[18px] transition-all duration-200",
-              favorite ? "fill-[#FF6B00] text-[#FF6B00]" : "text-[#111111]",
-              heartPop && "scale-125"
-            )}
-          />
-        </button>
       </div>
 
       {/* Content */}
