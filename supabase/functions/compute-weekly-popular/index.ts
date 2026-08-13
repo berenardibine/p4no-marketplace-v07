@@ -55,16 +55,8 @@ Deno.serve(async (req) => {
       viewMap.set(v.product_id, (viewMap.get(v.product_id) ?? 0) + 1);
     });
 
-    // Favorites in last 7d
-    const { data: favs } = await supabase
-      .from("product_likes")
-      .select("product_id, created_at")
-      .gte("created_at", sinceIso)
-      .limit(50000);
+    // Product Likes is RETIRED: no `product_likes` read, favourites are always 0.
     const favMap = new Map<string, number>();
-    (favs ?? []).forEach((v: any) => {
-      favMap.set(v.product_id, (favMap.get(v.product_id) ?? 0) + 1);
-    });
 
     const ids = new Set<string>([...viewMap.keys(), ...favMap.keys()]);
     const rows = Array.from(ids).map((id) => {
@@ -101,7 +93,7 @@ Deno.serve(async (req) => {
         .from("products")
         .select(
           `id, title, slug, price, images, category, location, status,
-           created_at, views, likes, rental_unit, rental_fee, sponsored,
+           created_at, views, rental_unit, rental_fee, sponsored,
            product_type, country, currency_code, currency_symbol,
            is_negotiable, admin_posted, discount, discount_expiry,
            seller_id, shop_id,

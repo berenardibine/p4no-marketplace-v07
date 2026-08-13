@@ -294,20 +294,19 @@ async function publishManifest(changed: string[], removed: string[]): Promise<nu
 
 const PRODUCT_COLS = `
   id,slug,title,description,price,currency_symbol,images,video_url,video_thumbnail,
-  category,status,views,likes,created_at,updated_at,seller_id,shop_id,
+  category,status,views,created_at,updated_at,seller_id,shop_id,
   minimum_quantity,unlimited_quantity,quantity,contact_call,contact_whatsapp,
   admin_posted,admin_shop_name,
   seller:profiles!products_seller_id_fkey(id,full_name,profile_image,whatsapp_number,call_number),
   shop:shops(id,name,logo_url,slug)
 `;
 
-type Sort = "created" | "likes" | "views";
+type Sort = "created" | "views";
 
 function productsQuery(sort: Sort, limit: number, sponsored = false) {
   let q = admin.from("products").select(PRODUCT_COLS).eq("status", "active");
   if (sponsored) q = q.eq("sponsored", true);
   if (sort === "created") q = q.order("created_at", { ascending: false });
-  if (sort === "likes") q = q.order("likes", { ascending: false, nullsFirst: false });
   if (sort === "views") q = q.order("views", { ascending: false, nullsFirst: false });
   return q.limit(limit);
 }
@@ -374,7 +373,7 @@ const card = (p: any) => ({
   id: p.id, slug: p.slug, title: p.title, price: p.price,
   currency_symbol: p.currency_symbol, category: p.category,
   images: Array.isArray(p.images) ? p.images.slice(0, 1) : [],
-  views: p.views, likes: p.likes, created_at: p.created_at,
+  views: p.views, created_at: p.created_at,
 });
 
 function genProductLists(ctx: RunContext) {
@@ -383,7 +382,7 @@ function genProductLists(ctx: RunContext) {
       products(ctx, "created", 1000),
       products(ctx, "created", 100),
       products(ctx, "created", 100, true),
-      products(ctx, "likes", 100),
+      products(ctx, "views", 100),
       products(ctx, "views", 100),
     ]);
     const searchIndex = latest.concat(featured, popular, trending).reduce((acc: any[], p: any) => {
@@ -409,7 +408,7 @@ function genFeeds(ctx: RunContext) {
   return ctx.task("feeds", async () => {
     const [latest, popular, trending, featured] = await Promise.all([
       products(ctx, "created", 100),
-      products(ctx, "likes", 100),
+      products(ctx, "views", 100),
       products(ctx, "views", 100),
       products(ctx, "created", 100, true),
     ]);
@@ -446,7 +445,7 @@ function genHomepage(ctx: RunContext) {
   return ctx.task("homepage", async () => {
     const [latest, popular, featured, cats] = await Promise.all([
       products(ctx, "created", 24),
-      products(ctx, "likes", 24),
+      products(ctx, "views", 24),
       products(ctx, "created", 12, true),
       categoriesAll(ctx),
     ]);
@@ -473,7 +472,7 @@ function genReels(ctx: RunContext) {
     const cols = `
       id,title,description,price,currency_symbol,video_url,video_thumbnail,images,slug,
       seller_id,shop_id,contact_call,contact_whatsapp,minimum_quantity,unlimited_quantity,
-      quantity,views,likes,admin_posted,admin_shop_name,created_at,
+      quantity,views,admin_posted,admin_shop_name,created_at,
       seller:profiles!products_seller_id_fkey(id,full_name,profile_image,whatsapp_number,call_number),
       shop:shops(id,name,logo_url,slug)
     `;

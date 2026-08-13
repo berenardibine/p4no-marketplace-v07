@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { useFavorites } from "@/hooks/useProducts";
 import { useAuth } from "@/hooks/useAuth";
 import { useProductBySlug } from "@/hooks/useProductBySlug";
 import { useLinkAnalytics } from "@/hooks/useLinkAnalytics";
@@ -83,7 +82,6 @@ const ProductDetail = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { product, loading, error, isSlugBased } = useProductBySlug(slugOrId);
-  const { isFavorite, toggleFavorite } = useFavorites();
   const [currentImage, setCurrentImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -193,7 +191,6 @@ const ProductDetail = () => {
   }
 
   const images = product.images?.length > 0 ? product.images : ['/placeholder.svg'];
-  const favorite = isFavorite(product.id);
 
   return (
     <>

@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { Heart, MapPin, Tag, Users, UserPlus, UserCheck } from "lucide-react";
+import { MapPin, Tag, Users, UserPlus, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-import { useFavorites } from "@/hooks/useProducts";
 import { useAuth, useAuthAction } from "@/hooks/useAuth";
 import { useSellerConnections } from "@/hooks/useSellerConnections";
 import { Button } from "@/components/ui/button";
@@ -48,12 +46,9 @@ const ProductCard = ({
   const { user, profile } = useAuth();
   const { withAuth } = useAuthAction();
   const { toast } = useToast();
-  const { isFavorite, toggleFavorite } = useFavorites();
   const { connectionCount, isConnected, toggleConnection, loading: connectionLoading } = useSellerConnections(sellerId);
-  const [isAnimating, setIsAnimating] = useState(false);
   const prefetchRef = usePrefetchProduct<HTMLDivElement>(id);
 
-  const favorite = isFavorite(id);
   const isDiscounted = hasActiveDiscount(discount, discountExpiry);
   const discountedPrice = isDiscounted ? getDiscountedPrice(price, discount!) : price;
 
@@ -64,15 +59,6 @@ const ProductCard = ({
       return;
     }
     navigate(`/product/${id}`);
-  };
-
-  const handleFavoriteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    withAuth(() => {
-      setIsAnimating(true);
-      toggleFavorite(id);
-      setTimeout(() => setIsAnimating(false), 300);
-    });
   };
 
   const handleConnectClick = async (e: React.MouseEvent) => {
@@ -144,24 +130,6 @@ const ProductCard = ({
         
         {/* Save + Favorite Buttons */}
         <div className="absolute top-2 right-2 flex flex-col gap-1.5">
-          <button
-            onClick={handleFavoriteClick}
-            className={cn(
-              "w-9 h-9 rounded-full flex items-center justify-center",
-              "backdrop-blur-md transition-all duration-200 tap-highlight-none shadow-sm",
-              favorite 
-                ? "bg-primary text-primary-foreground shadow-orange" 
-                : "bg-white/90 text-muted-foreground hover:bg-white hover:text-primary"
-            )}
-          >
-            <Heart 
-              className={cn(
-                "h-4 w-4 transition-all",
-                favorite && "fill-current",
-                isAnimating && "animate-bounce-subtle"
-              )} 
-            />
-          </button>
           <SaveButton itemType="product" itemId={id} className="bg-white/90 hover:bg-white shadow-sm" />
         </div>
 

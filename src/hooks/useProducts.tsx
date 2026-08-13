@@ -289,56 +289,15 @@ export const useMyProducts = () => {
   return { products, loading, refetch: fetchMyProducts };
 };
 
+// Product Likes (product_likes) is RETIRED — no reads, no writes, no polling.
+// Kept as an inert shim so existing imports keep compiling; the UI no longer
+// renders like controls. Use SaveButton (`saved_items`) instead.
 export const useFavorites = () => {
-  const { user } = useAuth();
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (user) {
-      fetchFavorites();
-    } else {
-      setFavorites([]);
-      setLoading(false);
-    }
-  }, [user]);
-
-  const fetchFavorites = async () => {
-    if (!user) return;
-    
-    try {
-      const { data } = await (supabase as any)
-        .from('product_likes')
-        .select('product_id')
-        .eq('user_id', user.id);
-
-      setFavorites(data?.map(f => f.product_id) || []);
-    } catch (err) {
-      console.error('Error fetching favorites:', err);
-    } finally {
-      setLoading(false);
-    }
+  return {
+    favorites: [] as string[],
+    loading: false,
+    toggleFavorite: async (_productId: string) => {},
+    isFavorite: (_id: string) => false,
   };
-
-  const toggleFavorite = async (productId: string) => {
-    if (!user) return;
-
-    const isFavorite = favorites.includes(productId);
-    
-    if (isFavorite) {
-      await (supabase as any)
-        .from('product_likes')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('product_id', productId);
-      setFavorites(prev => prev.filter(id => id !== productId));
-    } else {
-      await (supabase as any)
-        .from('product_likes')
-        .insert({ user_id: user.id, product_id: productId });
-      setFavorites(prev => [...prev, productId]);
-    }
-  };
-
-  return { favorites, loading, toggleFavorite, isFavorite: (id: string) => favorites.includes(id) };
 };
+

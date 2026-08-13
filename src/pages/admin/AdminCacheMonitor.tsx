@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import LiveTelemetryPanel from "@/components/admin/LiveTelemetryPanel";
 import RequestBudgetPanel from "@/components/admin/RequestBudgetPanel";
+import RetiredModulesPanel from "@/components/admin/RetiredModulesPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { STATIC_CDN, isStrictStaticMode, setStrictStaticMode } from "@/lib/staticFlags";
 import { getGuardStats, subscribeGuardStats, repairIndexedDB } from "@/lib/cdnGuard";
@@ -653,8 +654,9 @@ export default function AdminCacheMonitor() {
           <TabsTrigger value="budget"><Activity className="h-3.5 w-3.5 mr-1" />Budget &amp; Stampede</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="budget" className="mt-4">
+        <TabsContent value="budget" className="mt-4 space-y-4">
           <RequestBudgetPanel />
+          <RetiredModulesPanel />
         </TabsContent>
         <TabsContent value="dedup" className="mt-4">
           <GeneratorDedupPanel />
