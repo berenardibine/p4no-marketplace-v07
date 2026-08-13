@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
         .from("products")
         .select(
           `id, title, slug, price, images, category, location, status,
-           created_at, views, likes, rental_unit, rental_fee, sponsored,
+           created_at, views, rental_unit, rental_fee, sponsored,
            product_type, country, currency_code, currency_symbol,
            is_negotiable, admin_posted, discount, discount_expiry,
            seller_id, shop_id,

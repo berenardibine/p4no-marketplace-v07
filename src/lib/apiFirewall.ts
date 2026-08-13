@@ -25,6 +25,38 @@ const REST_MARKER = '/rest/v1/';
 const POLLING_WINDOW_MS = 60_000;
 const POLLING_THRESHOLD = 10; // >10 reads/min to same table = suspicious
 
+// Retired modules: tables that MUST receive zero traffic. Any hit is a defect
+// and is surfaced in the Unified Traffic & Cache Monitor diagnostics.
+const RETIRED_TABLES = new Set(['product_likes']);
+interface RetiredHit { table: string; method: string; route: string; at: number; stack: string }
+const retiredHits: RetiredHit[] = [];
+const retiredCounts = new Map<string, number>();
+const retiredListeners = new Set<() => void>();
+
+export function subscribeRetiredTables(cb: () => void) {
+  retiredListeners.add(cb);
+  return () => { retiredListeners.delete(cb); };
+}
+
+/** Diagnostic: "Product Likes Requests" and any other retired-module traffic. */
+export function getRetiredTableStats() {
+  return {
+    tables: Array.from(retiredCounts.entries()).map(([table, count]) => ({ table, count })),
+    productLikesRequests: retiredCounts.get('product_likes') ?? 0,
+    recent: retiredHits.slice(-20).reverse(),
+  };
+}
+
+function recordRetired(table: string, method: string, route: string) {
+  retiredCounts.set(table, (retiredCounts.get(table) ?? 0) + 1);
+  retiredHits.push({
+    table, method, route, at: Date.now(),
+    stack: (new Error().stack || '').split('\n').slice(2, 6).join(' | '),
+  });
+  if (retiredHits.length > 100) retiredHits.shift();
+  retiredListeners.forEach((cb) => { try { cb(); } catch { /* ignore */ } });
+}
+
 interface TableStat {
   table: string;
   reads: number;
@@ -89,6 +121,23 @@ export function installApiFirewall() {
     stat.hits.push(now);
     const cutoff = now - POLLING_WINDOW_MS;
     while (stat.hits.length && stat.hits[0] < cutoff) stat.hits.shift();
+
+    // Retired module guard: product_likes must never be touched again.
+    if (RETIRED_TABLES.has(table)) {
+      recordRetired(table, method, routeShape());
+      stat.blocked += 1;
+      totalBlocked += 1;
+      markViolation(`rest:${table}`, 'retired-module');
+      recordTraffic({
+        path: `rest:${table}`, layer: 'db', bytes: 0, ms: 0, at: Date.now(),
+        status: 200, route: routeShape(), resourceType: `retired:${table}`,
+        missReason: 'retired-module',
+      });
+      return new Response(isRead ? '[]' : '{}', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // Strict-mode block: refuse public-content reads at the network layer.
     if (isRead && isStrictStaticMode() && isPublicTable(table)) {
@@ -196,5 +245,7 @@ export function getApiFirewallStats() {
 
 export function resetApiFirewallStats() {
   tables.clear();
+  retiredHits.length = 0;
+  retiredCounts.clear();
   totalReads = totalWrites = totalBlocked = totalMs = 0;
 }
