@@ -42,6 +42,21 @@ export type MonitorSource = 'public' | 'admin' | 'system';
 
 export const MONITOR_SOURCES: MonitorSource[] = ['public', 'admin', 'system'];
 
+/**
+ * Request classes. Delivery reads and database reads answer "how was content
+ * delivered"; writes / edge / storage / rpc are REAL traffic too, but they are
+ * never folded into the cache-hit ratio.
+ */
+export type RequestClass =
+  | 'delivery_read'
+  | 'db_read'
+  | 'db_write'
+  | 'edge_function'
+  | 'storage'
+  | 'rpc';
+
+export const isDeliveryClass = (k?: RequestClass) => !k || k === 'delivery_read' || k === 'db_read';
+
 /** Full per-source aggregate — the monitor can render any view from these. */
 export interface SourceAgg {
   requests: number;
@@ -57,6 +72,18 @@ export interface SourceAgg {
   miss_reasons: Record<string, number>;
   resources: Record<string, number>;
   last_at: number;
+  /** Non-delivery traffic, accounted separately (never a cache hit/miss). */
+  writes: number;
+  write_bytes: number;
+  edge: number;
+  edge_bytes: number;
+  storage: number;
+  storage_bytes: number;
+  rpc: number;
+  errors: number;
+  write_endpoints: Record<string, number>;
+  edge_endpoints: Record<string, number>;
+  path_bytes: Record<string, number>;
 }
 
 export interface DeliverySample {
@@ -74,7 +101,12 @@ export interface DeliverySample {
   hit: boolean;
   miss_reason?: string;
   source: MonitorSource;
+  /** Defaults to a delivery read when absent (legacy messages). */
+  kind?: RequestClass;
+  /** HTTP verb, for write forensics. */
+  method?: string;
 }
+
 
 export interface TrafficSnapshotMessage {
   type: 'traffic_snapshot';
