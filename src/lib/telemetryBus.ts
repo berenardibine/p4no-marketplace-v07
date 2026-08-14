@@ -155,7 +155,19 @@ export const emptyAgg = (): SourceAgg => ({
   miss_reasons: {},
   resources: {},
   last_at: 0,
+  writes: 0,
+  write_bytes: 0,
+  edge: 0,
+  edge_bytes: 0,
+  storage: 0,
+  storage_bytes: 0,
+  rpc: 0,
+  errors: 0,
+  write_endpoints: {},
+  edge_endpoints: {},
+  path_bytes: {},
 });
+
 
 export const emptySources = (): Record<MonitorSource, SourceAgg> => ({
   public: emptyAgg(),
