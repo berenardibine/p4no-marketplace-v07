@@ -22,6 +22,8 @@ import { disabledFeatureTables } from './featureFlags';
 import { recordTraffic, routeShape } from './trafficTelemetry';
 
 const REST_MARKER = '/rest/v1/';
+const FN_MARKER = '/functions/v1/';
+const STORAGE_MARKER = '/storage/v1/';
 const POLLING_WINDOW_MS = 60_000;
 const POLLING_THRESHOLD = 10; // >10 reads/min to same table = suspicious
 
@@ -83,15 +85,39 @@ function statFor(name: string): TableStat {
   return s;
 }
 
+type Endpoint =
+  | { api: 'rest'; table: string; rpc: boolean }
+  | { api: 'functions'; table: string }
+  | { api: 'storage'; table: string };
+
+/**
+ * Every Supabase surface the app can touch is recognised here. Before this,
+ * only `/rest/v1/` was visible, which made Edge Functions (e.g.
+ * get-recommendations) and Storage completely invisible to telemetry.
+ */
+function parseEndpoint(url: string): Endpoint | null {
+  const seg = (marker: string) => {
+    const idx = url.indexOf(marker);
+    if (idx < 0) return null;
+    const rest = url.slice(idx + marker.length);
+    const q = rest.indexOf('?');
+    return q >= 0 ? rest.slice(0, q) : rest;
+  };
+  const rest = seg(REST_MARKER);
+  if (rest !== null) {
+    if (rest.startsWith('rpc/')) return { api: 'rest', table: `rpc:${rest.slice(4)}`, rpc: true };
+    return { api: 'rest', table: rest.split('/')[0] || 'unknown', rpc: false };
+  }
+  const fn = seg(FN_MARKER);
+  if (fn !== null) return { api: 'functions', table: `fn:${fn.split('/')[0] || 'unknown'}` };
+  const st = seg(STORAGE_MARKER);
+  if (st !== null) return { api: 'storage', table: `storage:${st.split('/').slice(0, 3).join('/')}` };
+  return null;
+}
+
 function parseTable(url: string): string | null {
-  const idx = url.indexOf(REST_MARKER);
-  if (idx < 0) return null;
-  const rest = url.slice(idx + REST_MARKER.length);
-  const q = rest.indexOf('?');
-  const path = q >= 0 ? rest.slice(0, q) : rest;
-  // Path may be `table` or `rpc/fn_name`
-  if (path.startsWith('rpc/')) return `rpc:${path.slice(4)}`;
-  return path.split('/')[0] || null;
+  const e = parseEndpoint(url);
+  return e ? e.table : null;
 }
 
 /** Install the fetch interceptor once. Safe to call multiple times. */
