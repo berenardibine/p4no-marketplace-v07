@@ -22,6 +22,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { pushHistory } from './telemetryHistory';
 
 export const TELEMETRY_CHANNEL = 'p4no:traffic-monitor';
 const EVENT = 'traffic_snapshot';
