@@ -19,7 +19,7 @@ import {
   type SourceAgg,
   type TrafficSnapshotMessage,
 } from '@/lib/telemetryBus';
-import { readHistory } from '@/lib/telemetryHistory';
+import { clearHistory, readHistory } from '@/lib/telemetryHistory';
 
 export const SOURCES: MonitorSource[] = MONITOR_SOURCES;
 export type SourceFilter = MonitorSource | 'all';
@@ -242,6 +242,7 @@ export function useLiveTelemetry(filter: SourceFilter = 'public') {
   const reset = useCallback(() => {
     repeats.current.clear();
     sessions.current.clear();
+    clearHistory();
     setState((s) => ({ ...initial(), status: s.status }));
   }, []);
 
