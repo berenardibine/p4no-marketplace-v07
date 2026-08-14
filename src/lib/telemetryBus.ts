@@ -22,6 +22,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { pushHistory } from './telemetryHistory';
 
 export const TELEMETRY_CHANNEL = 'p4no:traffic-monitor';
 const EVENT = 'traffic_snapshot';
@@ -42,6 +43,21 @@ export type MonitorSource = 'public' | 'admin' | 'system';
 
 export const MONITOR_SOURCES: MonitorSource[] = ['public', 'admin', 'system'];
 
+/**
+ * Request classes. Delivery reads and database reads answer "how was content
+ * delivered"; writes / edge / storage / rpc are REAL traffic too, but they are
+ * never folded into the cache-hit ratio.
+ */
+export type RequestClass =
+  | 'delivery_read'
+  | 'db_read'
+  | 'db_write'
+  | 'edge_function'
+  | 'storage'
+  | 'rpc';
+
+export const isDeliveryClass = (k?: RequestClass) => !k || k === 'delivery_read' || k === 'db_read';
+
 /** Full per-source aggregate — the monitor can render any view from these. */
 export interface SourceAgg {
   requests: number;
@@ -57,6 +73,18 @@ export interface SourceAgg {
   miss_reasons: Record<string, number>;
   resources: Record<string, number>;
   last_at: number;
+  /** Non-delivery traffic, accounted separately (never a cache hit/miss). */
+  writes: number;
+  write_bytes: number;
+  edge: number;
+  edge_bytes: number;
+  storage: number;
+  storage_bytes: number;
+  rpc: number;
+  errors: number;
+  write_endpoints: Record<string, number>;
+  edge_endpoints: Record<string, number>;
+  path_bytes: Record<string, number>;
 }
 
 export interface DeliverySample {
@@ -74,7 +102,12 @@ export interface DeliverySample {
   hit: boolean;
   miss_reason?: string;
   source: MonitorSource;
+  /** Defaults to a delivery read when absent (legacy messages). */
+  kind?: RequestClass;
+  /** HTTP verb, for write forensics. */
+  method?: string;
 }
+
 
 export interface TrafficSnapshotMessage {
   type: 'traffic_snapshot';
@@ -123,7 +156,19 @@ export const emptyAgg = (): SourceAgg => ({
   miss_reasons: {},
   resources: {},
   last_at: 0,
+  writes: 0,
+  write_bytes: 0,
+  edge: 0,
+  edge_bytes: 0,
+  storage: 0,
+  storage_bytes: 0,
+  rpc: 0,
+  errors: 0,
+  write_endpoints: {},
+  edge_endpoints: {},
+  path_bytes: {},
 });
+
 
 export const emptySources = (): Record<MonitorSource, SourceAgg> => ({
   public: emptyAgg(),
@@ -268,28 +313,12 @@ function pushSample(s: DeliverySample) {
 
 /** Record one real delivery event. Aggregated locally, never written to the DB. */
 export function publishDelivery(s: DeliverySample): void {
+  // History is recorded even when publishing is disabled: it is local-only and
+  // it is what lets the monitor show traffic that happened BEFORE it opened.
+  try { pushHistory(s); } catch { /* never break a read */ }
   if (!publishingEnabled()) return;
-  const a = pending.by_source[s.source] ?? pending.by_source.public;
-  const bytes = Math.max(0, s.bytes || 0);
-  const ms = Math.max(0, s.latency_ms || 0);
-
+  accumulate(pending.by_source[s.source] ?? pending.by_source.public, s);
   pending.requests += 1;
-  a.requests += 1;
-  a.bytes += bytes;
-  a.last_at = s.at || Date.now();
-  a.layer_count[s.layer] += 1;
-  a.layer_bytes[s.layer] += bytes;
-  a.layer_ms[s.layer] += ms;
-  a.latencies.push(ms);
-  if (s.hit) a.hits += 1;
-  if (s.database_used) {
-    a.db += 1;
-    a.db_bytes += bytes;
-  }
-  a.routes[s.route] = (a.routes[s.route] ?? 0) + 1;
-  if (s.resource_type) a.resources[s.resource_type] = (a.resources[s.resource_type] ?? 0) + 1;
-  a.miss_reasons[s.miss_reason ?? (s.hit ? 'cache_hit' : 'database_fallback')] =
-    (a.miss_reasons[s.miss_reason ?? (s.hit ? 'cache_hit' : 'database_fallback')] ?? 0) + 1;
 
   pushSample(s);
 
@@ -300,6 +329,58 @@ export function publishDelivery(s: DeliverySample): void {
     flushTimer = setTimeout(flush, flushes === 0 ? FIRST_FLUSH_MS : FLUSH_MS);
   }
 }
+
+/**
+ * Fold one observed sample into an aggregate. Shared by the publisher and by
+ * the monitor's history seeding so both compute metrics identically.
+ */
+export function accumulate(a: SourceAgg, s: DeliverySample): SourceAgg {
+  const bytes = Math.max(0, s.bytes || 0);
+  const ms = Math.max(0, s.latency_ms || 0);
+  const kind: RequestClass = s.kind ?? (s.database_used ? 'db_read' : 'delivery_read');
+
+  a.bytes += bytes;
+  a.last_at = Math.max(a.last_at, s.at || Date.now());
+  a.latencies.push(ms);
+  a.routes[s.route] = (a.routes[s.route] ?? 0) + 1;
+  a.path_bytes[s.path] = (a.path_bytes[s.path] ?? 0) + bytes;
+  if (s.status && s.status >= 400) a.errors += 1;
+
+  if (isDeliveryClass(kind)) {
+    a.requests += 1;
+    a.layer_count[s.layer] += 1;
+    a.layer_bytes[s.layer] += bytes;
+    a.layer_ms[s.layer] += ms;
+    if (s.hit) a.hits += 1;
+    if (s.database_used) {
+      a.db += 1;
+      a.db_bytes += bytes;
+    }
+    if (s.resource_type) a.resources[s.resource_type] = (a.resources[s.resource_type] ?? 0) + 1;
+    const reason = s.miss_reason ?? (s.hit ? 'cache_hit' : 'database_fallback');
+    a.miss_reasons[reason] = (a.miss_reasons[reason] ?? 0) + 1;
+    return a;
+  }
+
+  // Non-delivery classes: real traffic, tracked separately from the hit ratio.
+  if (kind === 'db_write') {
+    a.writes += 1;
+    a.write_bytes += bytes;
+    a.write_endpoints[s.path] = (a.write_endpoints[s.path] ?? 0) + 1;
+  } else if (kind === 'edge_function') {
+    a.edge += 1;
+    a.edge_bytes += bytes;
+    a.edge_endpoints[s.path] = (a.edge_endpoints[s.path] ?? 0) + 1;
+  } else if (kind === 'storage') {
+    a.storage += 1;
+    a.storage_bytes += bytes;
+  } else if (kind === 'rpc') {
+    a.rpc += 1;
+    a.write_endpoints[s.path] = (a.write_endpoints[s.path] ?? 0) + 1;
+  }
+  return a;
+}
+
 
 export function getPublisherStats() {
   return {

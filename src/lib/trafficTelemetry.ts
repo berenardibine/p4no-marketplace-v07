@@ -14,7 +14,7 @@
 // Pure in-memory. Nothing here writes to the database.
 
 import { recordBudgetEvent } from './requestBudget';
-import { publishDelivery, type MonitorSource } from './telemetryBus';
+import { publishDelivery, type MonitorSource, type RequestClass } from './telemetryBus';
 
 /**
  * Classify WHO caused a read. PUBLIC / ADMIN / SYSTEM must never be mixed:
@@ -65,6 +65,10 @@ export interface TrafficEvent {
   resourceType?: string;
   /** Correlation id for the Live Request Inspector. */
   requestId?: string;
+  /** Request class. Defaults to a delivery read. */
+  kind?: RequestClass;
+  /** HTTP verb (write forensics). */
+  method?: string;
 }
 
 interface PathAgg {
@@ -150,8 +154,12 @@ export function recordTraffic(evt: TrafficEvent): void {
       hit: evt.layer !== 'db',
       miss_reason: evt.missReason,
       source: classifySource(evt.path, evt.source),
+      kind: evt.kind,
+      method: evt.method,
     });
   } catch { /* telemetry must never break a read */ }
+  const delivery = !evt.kind || evt.kind === 'delivery_read' || evt.kind === 'db_read';
+  if (!delivery) return; // writes / edge / storage are accounted by the bus only
   layerCount[evt.layer] += 1;
   layerBytes[evt.layer] += Math.max(0, evt.bytes || 0);
 

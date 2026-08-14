@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MONITOR_SOURCES,
+  accumulate,
+  emptyAgg,
   emptySources,
   subscribeMonitor,
   type DeliverySample,
@@ -17,6 +19,7 @@ import {
   type SourceAgg,
   type TrafficSnapshotMessage,
 } from '@/lib/telemetryBus';
+import { clearHistory, readHistory } from '@/lib/telemetryHistory';
 
 export const SOURCES: MonitorSource[] = MONITOR_SOURCES;
 export type SourceFilter = MonitorSource | 'all';
@@ -54,6 +57,18 @@ export interface TelemetryView {
   cacheHitRatio: number;
   dbRatio: number;
   preventedReads: number;
+  /** Non-delivery traffic, never mixed into the cache-hit ratio. */
+  writes: number;
+  writeBytes: number;
+  edgeCalls: number;
+  edgeBytes: number;
+  storageCalls: number;
+  storageBytes: number;
+  rpcCalls: number;
+  errors: number;
+  writeEndpoints: { endpoint: string; count: number }[];
+  edgeEndpoints: { endpoint: string; count: number }[];
+  topPathsByBytes: { path: string; bytes: number }[];
 }
 
 export interface LiveTelemetryState {
@@ -88,12 +103,38 @@ const emptyView = (): TelemetryView => ({
   cacheHitRatio: 0,
   dbRatio: 0,
   preventedReads: 0,
+  writes: 0,
+  writeBytes: 0,
+  edgeCalls: 0,
+  edgeBytes: 0,
+  storageCalls: 0,
+  storageBytes: 0,
+  rpcCalls: 0,
+  errors: 0,
+  writeEndpoints: [],
+  edgeEndpoints: [],
+  topPathsByBytes: [],
 });
+
+/**
+ * Seed the monitor from the rolling history of REAL observed samples so that
+ * traffic which happened before the dashboard opened is visible. This reads
+ * localStorage only — zero network, zero database.
+ */
+function seedFromHistory(): { bySource: Record<MonitorSource, SourceAgg>; samples: DeliverySample[] } {
+  const bySource = emptySources();
+  let samples: DeliverySample[] = [];
+  try {
+    const rows = readHistory();
+    for (const r of rows) accumulate(bySource[r.source] ?? bySource.public, r);
+    samples = rows.slice(-200).reverse();
+  } catch { /* history is best-effort */ }
+  return { bySource, samples };
+}
 
 const initial = (): LiveTelemetryState => ({
   status: 'connecting',
-  bySource: emptySources(),
-  samples: [],
+  ...seedFromHistory(),
   duplicates: [],
   sessions: 0,
   eventsReceived: 0,
@@ -116,7 +157,21 @@ function mergeAgg(target: SourceAgg, add: SourceAgg): SourceAgg {
     miss_reasons: { ...target.miss_reasons },
     resources: { ...target.resources },
     last_at: Math.max(target.last_at, add.last_at || 0),
+    writes: target.writes + (add.writes ?? 0),
+    write_bytes: target.write_bytes + (add.write_bytes ?? 0),
+    edge: target.edge + (add.edge ?? 0),
+    edge_bytes: target.edge_bytes + (add.edge_bytes ?? 0),
+    storage: target.storage + (add.storage ?? 0),
+    storage_bytes: target.storage_bytes + (add.storage_bytes ?? 0),
+    rpc: target.rpc + (add.rpc ?? 0),
+    errors: target.errors + (add.errors ?? 0),
+    write_endpoints: { ...target.write_endpoints },
+    edge_endpoints: { ...target.edge_endpoints },
+    path_bytes: { ...target.path_bytes },
   };
+  for (const [k, v] of Object.entries(add.write_endpoints ?? {})) out.write_endpoints[k] = (out.write_endpoints[k] ?? 0) + (v as number);
+  for (const [k, v] of Object.entries(add.edge_endpoints ?? {})) out.edge_endpoints[k] = (out.edge_endpoints[k] ?? 0) + (v as number);
+  for (const [k, v] of Object.entries(add.path_bytes ?? {})) out.path_bytes[k] = (out.path_bytes[k] ?? 0) + (v as number);
   for (const l of LAYERS) {
     out.layer_count[l] += add.layer_count?.[l] ?? 0;
     out.layer_bytes[l] += add.layer_bytes?.[l] ?? 0;
@@ -129,11 +184,7 @@ function mergeAgg(target: SourceAgg, add: SourceAgg): SourceAgg {
 }
 
 function combine(aggs: SourceAgg[]): SourceAgg {
-  return aggs.reduce((acc, a) => mergeAgg(acc, a), {
-    requests: 0, bytes: 0, db: 0, db_bytes: 0, hits: 0,
-    layer_count: emptyLayers(), layer_bytes: emptyLayers(), layer_ms: emptyLayers(),
-    latencies: [], routes: {}, miss_reasons: {}, resources: {}, last_at: 0,
-  });
+  return aggs.reduce((acc, a) => mergeAgg(acc, a), emptyAgg());
 }
 
 function toView(agg: SourceAgg, samples: DeliverySample[]): TelemetryView {
@@ -165,6 +216,20 @@ function toView(agg: SourceAgg, samples: DeliverySample[]): TelemetryView {
     cacheHitRatio: agg.requests ? (agg.hits / agg.requests) * 100 : 0,
     dbRatio: agg.requests ? (agg.db / agg.requests) * 100 : 0,
     preventedReads: Math.max(0, agg.requests - agg.db),
+    writes: agg.writes ?? 0,
+    writeBytes: agg.write_bytes ?? 0,
+    edgeCalls: agg.edge ?? 0,
+    edgeBytes: agg.edge_bytes ?? 0,
+    storageCalls: agg.storage ?? 0,
+    storageBytes: agg.storage_bytes ?? 0,
+    rpcCalls: agg.rpc ?? 0,
+    errors: agg.errors ?? 0,
+    writeEndpoints: rank(agg.write_endpoints ?? {}, 'endpoint', 10),
+    edgeEndpoints: rank(agg.edge_endpoints ?? {}, 'endpoint', 10),
+    topPathsByBytes: Object.entries(agg.path_bytes ?? {})
+      .map(([path, bytes]) => ({ path, bytes }))
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, 12),
   };
 }
 
@@ -177,6 +242,7 @@ export function useLiveTelemetry(filter: SourceFilter = 'public') {
   const reset = useCallback(() => {
     repeats.current.clear();
     sessions.current.clear();
+    clearHistory();
     setState((s) => ({ ...initial(), status: s.status }));
   }, []);
 
