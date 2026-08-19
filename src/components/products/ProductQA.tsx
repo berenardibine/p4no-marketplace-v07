@@ -11,6 +11,7 @@ import { HelpCircle, Send, Loader2, ThumbsUp, MessageSquare, Trash2, EyeOff, Bad
 import { formatDistanceToNow } from 'date-fns';
 import GuestPromptDialog from '@/components/auth/GuestPromptDialog';
 import { useScrollToAnchor } from '@/hooks/useScrollToAnchor';
+import { getProductQa, invalidateProductQa } from '@/lib/productQaCache';
 
 interface QAProps { productId: string; productSellerId?: string | null }
 interface AnswerRow {
@@ -43,28 +44,16 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
 
   const authorName = profile?.full_name || user?.email?.split('@')[0] || 'User';
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const { data: qs, error: qErr, count } = await supabase
-        .from('product_questions')
-        .select('id,user_id,author_name,content,like_count,answer_count,created_at', { count: 'exact' })
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false })
-        .limit(visibleCount);
-      if (qErr) throw qErr;
-      setTotalCount(count || 0);
-      const qIds = (qs || []).map((q: any) => q.id);
-      let answers: AnswerRow[] = [];
-      if (qIds.length) {
-        const { data: aData } = await supabase
-          .from('product_answers')
-          .select('id,question_id,parent_answer_id,user_id,author_name,content,is_seller_reply,like_count,created_at')
-          .in('question_id', qIds)
-          .order('created_at', { ascending: true });
-        answers = (aData as AnswerRow[]) || [];
-      }
-      const grouped: QuestionRow[] = (qs || []).map((q: any) => ({
+      if (force) invalidateProductQa(productId);
+      // Shared with <QAJsonLd> — one request per product per cache window.
+      const { questions: all, answers, total } = await getProductQa(productId, visibleCount);
+      setTotalCount(total);
+      const qs = all.slice(0, visibleCount);
+      const qIds = qs.map((q) => q.id);
+      const grouped: QuestionRow[] = qs.map((q: any) => ({
         ...q,
         answers: answers.filter((a) => a.question_id === q.id),
       }));
@@ -104,7 +93,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
     });
     setSubmitting(false);
     if (error) { toast({ title: 'Failed to post', description: error.message, variant: 'destructive' }); return; }
-    setNewQuestion(''); setShowAskForm(false); toast({ title: 'Question posted!' }); fetchAll();
+    setNewQuestion(''); setShowAskForm(false); toast({ title: 'Question posted!' }); fetchAll(true);
   };
 
   const submitReply = async (questionId: string, parentAnswerId?: string) => {
@@ -144,7 +133,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
         });
       }
     } catch {}
-    setReplyText(''); setReplyTo(null); fetchAll();
+    setReplyText(''); setReplyTo(null); fetchAll(true);
   };
 
   const toggleLike = async (targetType: 'question' | 'answer', targetId: string) => {
@@ -158,7 +147,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
         user_id: user.id, target_type: targetType, target_id: targetId,
       });
     }
-    fetchAll();
+    fetchAll(true);
   };
 
   const removeItem = async (kind: 'question' | 'answer', id: string) => {
@@ -166,14 +155,14 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
     const table = kind === 'question' ? 'product_questions' : 'product_answers';
     const { error } = await supabase.from(table).update({ is_deleted: true } as any).eq('id', id);
     if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
-    fetchAll();
+    fetchAll(true);
   };
 
   const hideItem = async (kind: 'question' | 'answer', id: string) => {
     const table = kind === 'question' ? 'product_questions' : 'product_answers';
     const { error } = await supabase.from(table).update({ is_hidden: true } as any).eq('id', id);
     if (error) { toast({ title: 'Hide failed', description: error.message, variant: 'destructive' }); return; }
-    fetchAll();
+    fetchAll(true);
   };
 
   const renderAnswer = (a: AnswerRow, depth = 0) => {

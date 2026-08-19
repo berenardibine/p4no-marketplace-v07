@@ -198,37 +198,57 @@ export function installApiFirewall() {
       else { stat.writes += 1; totalWrites += 1; }
       if (!res.ok) stat.errors += 1;
 
-      // REAL PostgREST accounting: every row this app READS from Supabase is a
-      // L5 database delivery event, no matter which hook issued it. Writes are
-      // mutations, not delivery, so they never pollute the cache-hit ratio.
-      if (isRead) {
-        try {
-          const header = Number(res.headers.get('content-length') ?? 0);
-          const emit = (bytes: number) =>
-            recordTraffic({
-              path: `rest:${table}`,
-              layer: 'db',
-              bytes,
-              ms,
-              at: Date.now(),
-              status: res.status,
-              route: routeShape(),
-              resourceType: `table:${table}`,
-              missReason: 'postgrest-read',
-            });
-          if (Number.isFinite(header) && header > 0) {
-            emit(header);
-          } else {
-            // Chunked responses omit content-length: measure the real payload
-            // from a clone so egress numbers are true, never estimated.
-            void res
-              .clone()
-              .arrayBuffer()
-              .then((buf) => emit(buf.byteLength))
-              .catch(() => emit(0));
-          }
-        } catch { /* ignore */ }
-      }
+      // REAL Supabase accounting for EVERY surface, not just PostgREST reads:
+      //   rest GET/HEAD          → db_read   (delivery, counts in hit ratio)
+      //   rest POST/PATCH/DELETE → db_write  (visible, never a "cache miss")
+      //   rpc/*                  → rpc
+      //   /functions/v1/*        → edge_function
+      //   /storage/v1/*          → storage
+      // Only delivery classes influence the cache-hit ratio; writes, RPC, edge
+      // and storage traffic are reported separately by the telemetry bus.
+      try {
+        const endpoint = parseEndpoint(url);
+        const kind: 'db_read' | 'db_write' | 'rpc' | 'edge_function' | 'storage' =
+          endpoint?.api === 'functions'
+            ? 'edge_function'
+            : endpoint?.api === 'storage'
+              ? 'storage'
+              : endpoint && endpoint.api === 'rest' && endpoint.rpc
+                ? 'rpc'
+                : isRead
+                  ? 'db_read'
+                  : 'db_write';
+        const missReason =
+          kind === 'db_read' ? 'postgrest-read'
+          : kind === 'db_write' ? undefined
+          : kind;
+        const header = Number(res.headers.get('content-length') ?? 0);
+        const emit = (bytes: number) =>
+          recordTraffic({
+            path: `${endpoint?.api ?? 'rest'}:${table}`,
+            layer: 'db',
+            bytes,
+            ms,
+            at: Date.now(),
+            status: res.status,
+            route: routeShape(),
+            resourceType: `table:${table}`,
+            missReason,
+            kind,
+            method,
+          });
+        if (Number.isFinite(header) && header > 0) {
+          emit(header);
+        } else {
+          // Chunked responses omit content-length: measure the real payload
+          // from a clone so egress numbers are true, never estimated.
+          void res
+            .clone()
+            .arrayBuffer()
+            .then((buf) => emit(buf.byteLength))
+            .catch(() => emit(0));
+        }
+      } catch { /* ignore */ }
       return res;
     } catch (err) {
       stat.errors += 1;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getRecommendations } from '@/lib/recommendations';
 import FloatingProductCard from '@/components/home/FloatingProductCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkles } from 'lucide-react';
@@ -32,20 +32,10 @@ const AIRecommendations = ({ productId }: AIRecommendationsProps) => {
     else setLoadingMore(true);
 
     try {
-      const { data: { publicUrl } } = supabase.storage.from('products').getPublicUrl('');
-      const baseUrl = publicUrl.replace('/storage/v1/object/public/products/', '');
-      
-      const response = await fetch(
-        `${baseUrl}/functions/v1/get-recommendations?productId=${productId}&page=${pageNum}&limit=12`,
-        {
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRieWtydWxmemhoa210Z2podmpoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NjgxNTksImV4cCI6MjA4MDQ0NDE1OX0.Bm5bMN6QGgXeF2EOvmF7nmNBksmrPCLTkcXy-bXWiV0'
-          }
-        }
-      );
+      // Cached + coalesced: repeat mounts and concurrent callers for the same
+      // product share one Edge Function request.
+      const result = await getRecommendations(productId, pageNum, 12);
 
-      const result = await response.json();
-      
       if (result.products) {
         if (append) {
           setProducts(prev => [...prev, ...result.products]);

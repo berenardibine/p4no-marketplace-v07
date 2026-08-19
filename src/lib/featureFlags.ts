@@ -278,12 +278,29 @@ export function subscribeFeatureFlags(fn: () => void): () => void {
   return () => listeners.delete(fn);
 }
 
+/** Timestamp of the last successful flag read, mirrored to localStorage. */
+const TS_KEY = `${LS_KEY}:ts`;
+/** Controlled cache window: admin changes still propagate within 10 minutes. */
+const FLAGS_TTL_MS = 10 * 60 * 1000;
+
+function flagsFresh(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const ts = Number(localStorage.getItem(TS_KEY) || 0);
+    return Number.isFinite(ts) && ts > 0 && Date.now() - ts < FLAGS_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * One tiny read per session (9 rows, ~1 KB). Deduped and cached.
- * Never called from a render loop.
+ * One tiny read per cache window (not per page load). The audit found this
+ * table re-fetched on the homepage AND again on product navigation; the
+ * localStorage-backed TTL removes the repeat read while keeping admin edits
+ * effective within FLAGS_TTL_MS (a forced refresh is always available).
  */
 export function loadFeatureFlags(force = false): Promise<Record<string, boolean>> {
-  if (loaded && !force) return Promise.resolve(getFeatureState());
+  if (!force && (loaded || flagsFresh())) return Promise.resolve(getFeatureState());
   if (inflight) return inflight;
   inflight = (async () => {
     try {
@@ -294,6 +311,7 @@ export function loadFeatureFlags(force = false): Promise<Record<string, boolean>
         for (const row of data) state[row.key] = row.enabled !== false;
         loaded = true;
         persist();
+        try { localStorage.setItem(TS_KEY, String(Date.now())); } catch { /* ignore */ }
         notify();
       }
     } catch { /* fail-open */ }

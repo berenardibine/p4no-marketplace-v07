@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { getProductQa } from '@/lib/productQaCache';
 
 interface Props { productId: string; productName?: string }
 interface QA { question: string; answers: { text: string; author: string; upvoteCount: number; dateCreated: string }[]; dateCreated: string; author: string; upvoteCount: number }
@@ -10,19 +10,11 @@ const QAJsonLd = ({ productId, productName }: Props) => {
     let cancelled = false;
     const scriptId = `qa-jsonld-${productId}`;
     (async () => {
-      const { data: qs } = await supabase
-        .from('product_questions')
-        .select('id,content,author_name,created_at,like_count')
-        .eq('product_id', productId)
-        .order('like_count', { ascending: false })
-        .limit(10);
-      if (!qs?.length || cancelled) return;
-      const ids = qs.map((q: any) => q.id);
-      const { data: ans } = await supabase
-        .from('product_answers')
-        .select('question_id,content,author_name,created_at,like_count')
-        .in('question_id', ids)
-        .order('like_count', { ascending: false });
+      // Shares the single Q&A request with <ProductQA>; ranking is applied
+      // locally so no extra PostgREST read is issued for structured data.
+      const { questions, answers: ans } = await getProductQa(productId, 10);
+      if (!questions.length || cancelled) return;
+      const qs = [...questions].sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
       const out: QA[] = qs.map((q: any) => ({
         question: q.content,
         author: q.author_name,
