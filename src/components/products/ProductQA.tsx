@@ -11,6 +11,7 @@ import { HelpCircle, Send, Loader2, ThumbsUp, MessageSquare, Trash2, EyeOff, Bad
 import { formatDistanceToNow } from 'date-fns';
 import GuestPromptDialog from '@/components/auth/GuestPromptDialog';
 import { useScrollToAnchor } from '@/hooks/useScrollToAnchor';
+import { getProductQa, invalidateProductQa } from '@/lib/productQaCache';
 
 interface QAProps { productId: string; productSellerId?: string | null }
 interface AnswerRow {
@@ -92,7 +93,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
     });
     setSubmitting(false);
     if (error) { toast({ title: 'Failed to post', description: error.message, variant: 'destructive' }); return; }
-    setNewQuestion(''); setShowAskForm(false); toast({ title: 'Question posted!' }); fetchAll();
+    setNewQuestion(''); setShowAskForm(false); toast({ title: 'Question posted!' }); fetchAll(true);
   };
 
   const submitReply = async (questionId: string, parentAnswerId?: string) => {
@@ -132,7 +133,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
         });
       }
     } catch {}
-    setReplyText(''); setReplyTo(null); fetchAll();
+    setReplyText(''); setReplyTo(null); fetchAll(true);
   };
 
   const toggleLike = async (targetType: 'question' | 'answer', targetId: string) => {
@@ -146,7 +147,7 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
         user_id: user.id, target_type: targetType, target_id: targetId,
       });
     }
-    fetchAll();
+    fetchAll(true);
   };
 
   const removeItem = async (kind: 'question' | 'answer', id: string) => {
@@ -154,14 +155,14 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
     const table = kind === 'question' ? 'product_questions' : 'product_answers';
     const { error } = await supabase.from(table).update({ is_deleted: true } as any).eq('id', id);
     if (error) { toast({ title: 'Delete failed', description: error.message, variant: 'destructive' }); return; }
-    fetchAll();
+    fetchAll(true);
   };
 
   const hideItem = async (kind: 'question' | 'answer', id: string) => {
     const table = kind === 'question' ? 'product_questions' : 'product_answers';
     const { error } = await supabase.from(table).update({ is_hidden: true } as any).eq('id', id);
     if (error) { toast({ title: 'Hide failed', description: error.message, variant: 'destructive' }); return; }
-    fetchAll();
+    fetchAll(true);
   };
 
   const renderAnswer = (a: AnswerRow, depth = 0) => {
