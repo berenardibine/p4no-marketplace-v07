@@ -311,6 +311,7 @@ export function loadFeatureFlags(force = false): Promise<Record<string, boolean>
         for (const row of data) state[row.key] = row.enabled !== false;
         loaded = true;
         persist();
+        try { localStorage.setItem(TS_KEY, String(Date.now())); } catch { /* ignore */ }
         notify();
       }
     } catch { /* fail-open */ }
