@@ -54,54 +54,62 @@ let impressionQueue: Array<{ productId: string; userId?: string; sessionId: stri
 let viewQueue: Array<{ productId: string; userId?: string; sessionId: string; refSource: string }> = [];
 let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Forensic finding: the homepage fired ONE edge-function request per visible
+// card (24+ per view, 10+ per reload) and every one of them failed — the
+// `record-impression` / `record-view` functions are not deployed on this
+// project. Two fixes:
+//   1. one batched request per flush instead of one per product
+//   2. a circuit breaker: after a 404/network failure the endpoint is marked
+//      unavailable for an hour, so a missing function can never produce a
+//      per-card request storm again. Analytics still flows through the batched
+//      `activity_events` pipeline.
+const DISABLED_PREFIX = 'p4no_track_off:';
+const DISABLE_TTL_MS = 60 * 60 * 1000;
+
+const endpointDisabled = (fn: string): boolean => {
+  try {
+    const ts = Number(localStorage.getItem(DISABLED_PREFIX + fn) || 0);
+    return ts > 0 && Date.now() - ts < DISABLE_TTL_MS;
+  } catch { return false; }
+};
+
+const disableEndpoint = (fn: string) => {
+  try { localStorage.setItem(DISABLED_PREFIX + fn, String(Date.now())); } catch { /* ignore */ }
+};
+
+type TrackItem = { productId: string; userId?: string; sessionId: string; refSource: string };
+
+const sendBatch = async (fn: string, items: TrackItem[]) => {
+  if (items.length === 0 || endpointDisabled(fn)) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fn}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ANON_KEY}`,
+        'apikey': ANON_KEY,
+      },
+      // `items` is the batch form; `...items[0]` keeps single-item back-compat.
+      body: JSON.stringify({ items, ...items[0] }),
+    });
+    if (res.status === 404 || res.status === 501) disableEndpoint(fn);
+  } catch {
+    disableEndpoint(fn);
+  }
+};
+
 const flushImpressionQueue = async () => {
   if (impressionQueue.length === 0) return;
-  
-  const batch = [...impressionQueue];
+  const batch = impressionQueue;
   impressionQueue = [];
-  
-  // Send impressions in parallel (max 5 at a time)
-  const chunks = [];
-  for (let i = 0; i < batch.length; i += 5) {
-    chunks.push(batch.slice(i, i + 5));
-  }
-  
-  for (const chunk of chunks) {
-    await Promise.all(
-      chunk.map(item => 
-        fetch(`${SUPABASE_URL}/functions/v1/record-impression`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${ANON_KEY}`,
-            'apikey': ANON_KEY
-          },
-          body: JSON.stringify(item)
-        }).catch(err => console.error('Impression tracking error:', err))
-      )
-    );
-  }
+  await sendBatch('record-impression', batch);
 };
 
 const flushViewQueue = async () => {
   if (viewQueue.length === 0) return;
-  
-  const batch = [...viewQueue];
+  const batch = viewQueue;
   viewQueue = [];
-  
-  await Promise.all(
-    batch.map(item => 
-      fetch(`${SUPABASE_URL}/functions/v1/record-view`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ANON_KEY}`,
-          'apikey': ANON_KEY
-        },
-        body: JSON.stringify(item)
-      }).catch(err => console.error('View tracking error:', err))
-    )
-  );
+  await sendBatch('record-view', batch);
 };
 
 const scheduleFlush = () => {
