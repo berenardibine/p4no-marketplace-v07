@@ -95,7 +95,7 @@ export const useSellerReviews = (sellerId?: string) => {
     const { error } = await supabase.from('seller_reviews').insert(reviewData);
     if (error) throw error;
 
-    await fetchReviews();
+    await fetchReviews(true);
   };
 
   return { reviews, averageRating, totalReviews, loading, hasReviewed, submitReview, refetch: fetchReviews };
