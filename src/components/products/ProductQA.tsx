@@ -43,28 +43,16 @@ const ProductQA = ({ productId, productSellerId }: QAProps) => {
 
   const authorName = profile?.full_name || user?.email?.split('@')[0] || 'User';
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (force = false) => {
     setLoading(true);
     try {
-      const { data: qs, error: qErr, count } = await supabase
-        .from('product_questions')
-        .select('id,user_id,author_name,content,like_count,answer_count,created_at', { count: 'exact' })
-        .eq('product_id', productId)
-        .order('created_at', { ascending: false })
-        .limit(visibleCount);
-      if (qErr) throw qErr;
-      setTotalCount(count || 0);
-      const qIds = (qs || []).map((q: any) => q.id);
-      let answers: AnswerRow[] = [];
-      if (qIds.length) {
-        const { data: aData } = await supabase
-          .from('product_answers')
-          .select('id,question_id,parent_answer_id,user_id,author_name,content,is_seller_reply,like_count,created_at')
-          .in('question_id', qIds)
-          .order('created_at', { ascending: true });
-        answers = (aData as AnswerRow[]) || [];
-      }
-      const grouped: QuestionRow[] = (qs || []).map((q: any) => ({
+      if (force) invalidateProductQa(productId);
+      // Shared with <QAJsonLd> — one request per product per cache window.
+      const { questions: all, answers, total } = await getProductQa(productId, visibleCount);
+      setTotalCount(total);
+      const qs = all.slice(0, visibleCount);
+      const qIds = qs.map((q) => q.id);
+      const grouped: QuestionRow[] = qs.map((q: any) => ({
         ...q,
         answers: answers.filter((a) => a.question_id === q.id),
       }));
