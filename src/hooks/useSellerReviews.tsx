@@ -32,19 +32,28 @@ export const useSellerReviews = (sellerId?: string) => {
   const [loading, setLoading] = useState(true);
   const [hasReviewed, setHasReviewed] = useState(false);
 
-  const fetchReviews = useCallback(async () => {
+  const fetchReviews = useCallback(async (force = false) => {
     if (!sellerId) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('seller_reviews')
-        .select('*')
-        .eq('seller_id', sellerId)
-        .order('created_at', { ascending: false });
+      const key = `seller_reviews:${sellerId}`;
+      if (force) invalidateQuery(key);
+      // Slow-changing per seller: shared 5-minute cache + only the columns the
+      // UI renders (was `select('*')` on every product view).
+      const reviewsData = await cachedQuery<SellerReview[]>(
+        key,
+        async () => {
+          const { data, error } = await supabase
+            .from('seller_reviews')
+            .select('id,seller_id,buyer_id,device_id,rating,comment,source,created_at')
+            .eq('seller_id', sellerId)
+            .order('created_at', { ascending: false });
+          if (error) throw error;
+          return (data || []) as SellerReview[];
+        },
+        { ttlMs: 5 * 60_000 },
+      );
 
-      if (error) throw error;
-
-      const reviewsData = (data || []) as SellerReview[];
       setReviews(reviewsData);
       setTotalReviews(reviewsData.length);
 
