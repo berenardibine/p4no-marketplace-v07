@@ -192,6 +192,55 @@ export default function LiveTelemetryPanel() {
         <Metric label="Latency avg / p95" value={na(`${v.avgMs} / ${v.p95Ms} ms`)} source="Delivery telemetry" />
       </div>
 
+      {/* Non-delivery traffic — observed, never mixed into the hit ratio */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Database className="h-4 w-4" /> {filter.toUpperCase()} writes &amp; non-delivery traffic
+            <span className="ml-auto text-[10px] font-normal uppercase text-muted-foreground">
+              Observed — excluded from cache-hit ratio
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Metric label="DB writes" value={v.writes.toLocaleString()} source="PostgREST telemetry" hint={`${fmtBytes(v.writeBytes)} observed`} />
+            <Metric label="Edge Function calls" value={v.edgeCalls.toLocaleString()} source="/functions/v1 telemetry" hint={`${fmtBytes(v.edgeBytes)} observed`} />
+            <Metric label="Storage requests" value={v.storageCalls.toLocaleString()} source="/storage/v1 telemetry" hint={`${fmtBytes(v.storageBytes)} observed`} />
+            <Metric label="RPC calls / errors" value={`${v.rpcCalls.toLocaleString()} / ${v.errors.toLocaleString()}`} source="PostgREST telemetry" />
+          </div>
+          {(v.writeEndpoints.length > 0 || v.edgeEndpoints.length > 0) && (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {[
+                { title: 'Write endpoints', rows: v.writeEndpoints },
+                { title: 'Edge Function endpoints', rows: v.edgeEndpoints },
+              ].map((block) => (
+                <div key={block.title}>
+                  <div className="mb-1 text-xs font-medium">{block.title}</div>
+                  {block.rows.length === 0 ? (
+                    <div className="text-xs text-muted-foreground">None observed</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow><TableHead>Endpoint</TableHead><TableHead className="w-24">Requests</TableHead></TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {block.rows.slice(0, 8).map((r) => (
+                          <TableRow key={r.endpoint}>
+                            <TableCell className="font-mono text-[11px]">{r.endpoint}</TableCell>
+                            <TableCell className="text-xs tabular-nums">{r.count.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Delivery distribution + cache hierarchy */}
       <div className="grid gap-3 lg:grid-cols-2">
         <Card>
