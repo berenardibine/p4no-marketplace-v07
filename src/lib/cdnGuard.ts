@@ -408,18 +408,35 @@ export async function getContent<T = unknown>(
     }
 
 
-    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it)
+    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it).
+    //    Transient failures (network error / 5xx) are retried before we ever
+    //    conclude anything about whether the content exists.
+    let lastError = false;
     try {
       const url = cdnUrl(key);
-      const res = await fetch(url, {
-        headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
-      });
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < NET_RETRIES.length + 1; attempt++) {
+        try {
+          res = await fetch(url, {
+            headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
+          });
+          if (res.status < 500) break;
+        } catch {
+          res = null;
+        }
+        lastError = true;
+        if (attempt < NET_RETRIES.length) {
+          await new Promise((r) => setTimeout(r, NET_RETRIES[attempt]));
+        }
+      }
+      if (!res) throw new Error('cdn-unreachable');
       const ms = Date.now() - started;
 
       if (res.status === 304 && cached) {
         record({ path: key, source: 'cdn', ms, status: 304, at: Date.now() });
         recordTraffic({ path: key, layer: 'browser', bytes: 0, ms, at: Date.now(), missReason: 'idb-version-stale' });
         memPut(key, cached.data, cached.version);
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
 
@@ -438,6 +455,7 @@ export async function getContent<T = unknown>(
           at: Date.now(),
           missReason: cached ? 'version-bump' : 'cold-cache',
         });
+        setOutcome(key, 'hit');
         return payload;
       }
 
@@ -459,6 +477,7 @@ export async function getContent<T = unknown>(
                 memPut(key, env, version);
                 record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
                 recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
+                setOutcome(key, 'hit');
                 return payload;
               }
             } catch { /* keep retrying */ }
@@ -470,9 +489,13 @@ export async function getContent<T = unknown>(
       if (cached) {
         record({ path: key, source: 'browser', ms, status: 200, at: Date.now() });
         recordTraffic({ path: key, layer: 'idb', bytes: 0, ms, at: Date.now(), missReason: 'stale-while-missing' });
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
 
+      // A 404 from the origin is the ONLY evidence that content is absent.
+      // Anything else (5xx, blocked, unreachable) leaves existence unknown.
+      setOutcome(key, res.status === 404 && !lastError ? 'missing' : 'unavailable');
 
       // 6) STRICT mode: refuse Supabase fallback. Queue regen, log violation, return null.
       if (isStrictStaticMode()) {
@@ -487,10 +510,13 @@ export async function getContent<T = unknown>(
     } catch {
       if (cached) {
         record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
+      setOutcome(key, 'unavailable');
       return runFallback<T>(key, opts.fallback);
     }
+
   })();
 
   inFlight.set(key, p);
