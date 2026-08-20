@@ -25,6 +25,9 @@ import { guardFallback, markMissing, isKnownMissing, clearMissing } from './stam
 // Exponential backoff for self-heal retries after 404.
 const HEAL_RETRIES = [800, 2000, 4500] as const;
 
+// Transient-network retries for the CDN fetch itself (cold-start protection).
+const NET_RETRIES = [250, 700] as const;
+
 export type CDNSource = 'browser' | 'cdn' | 'blob' | 'supabase';
 
 interface Envelope<T> {
@@ -378,6 +381,7 @@ export async function getContent<T = unknown>(
   const mem = memory.get(key);
   if (mem && Date.now() - mem.at < MEMORY_TTL_MS) {
     recordTraffic({ path: key, layer: 'memory', bytes: 0, ms: 0, at: Date.now() });
+    setOutcome(key, 'hit');
     return unwrap<T>(mem.data);
   }
 
@@ -404,6 +408,7 @@ export async function getContent<T = unknown>(
       memPut(key, cached.data, cached.version);
       record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
       recordTraffic({ path: key, layer: 'idb', bytes: 0, ms: Date.now() - started, at: Date.now() });
+      setOutcome(key, 'hit');
       return payload;
     }
 
