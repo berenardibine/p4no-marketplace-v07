@@ -54,7 +54,7 @@ const ProductLoader = () => (
   </div>
 );
 
-// Not Found Component
+// Not Found Component — only for products that genuinely do not exist.
 const ProductNotFound = () => (
   <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
     <div className="text-center max-w-md">
@@ -74,6 +74,34 @@ const ProductNotFound = () => (
     </div>
   </div>
 );
+
+// Delivery failure (offline, CDN hiccup, cold-start timeout). The product very
+// likely exists — offer a retry instead of telling the visitor it is gone.
+const ProductUnavailable = ({ onRetry }: { onRetry: () => void }) => (
+  <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
+    <div className="text-center max-w-md">
+      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+        <Package className="h-10 w-10 text-primary/60" />
+      </div>
+      <h1 className="text-2xl font-bold text-primary mb-2">Taking longer than usual</h1>
+      <p className="text-muted-foreground mb-6">
+        We couldn't load this product just now. Check your connection and try again.
+      </p>
+      <div className="flex items-center justify-center gap-2">
+        <Button size="lg" className="gap-2" onClick={onRetry}>
+          Try again
+        </Button>
+        <Button asChild size="lg" variant="outline" className="gap-2">
+          <Link to="/">
+            <Home className="h-5 w-5" />
+            Browse
+          </Link>
+        </Button>
+      </div>
+    </div>
+  </div>
+);
+
 
 const ProductDetail = () => {
   const { slugOrId } = useParams();
