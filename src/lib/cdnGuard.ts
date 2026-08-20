@@ -306,6 +306,51 @@ function servedFromBrowserCache(url: string): boolean {
 }
 
 /**
+ * Resolution outcome for the last completed read of a path.
+ *  hit         → payload delivered (any layer)
+ *  missing     → origin answered 404 and no cached copy exists → genuinely absent
+ *  unavailable → network/CORS/abort/timeout, or CDN 5xx → delivery failed, product
+ *                existence is UNKNOWN (must never render "not found")
+ *  blocked     → feature flag disabled this path
+ */
+export type ResolveOutcome = 'hit' | 'missing' | 'unavailable' | 'blocked';
+
+const outcomes = new Map<string, ResolveOutcome>();
+const OUTCOME_MAX = 500;
+
+function setOutcome(key: string, o: ResolveOutcome) {
+  if (outcomes.size >= OUTCOME_MAX) {
+    const oldest = outcomes.keys().next().value as string | undefined;
+    if (oldest) outcomes.delete(oldest);
+  }
+  outcomes.set(key, o);
+}
+
+/** Outcome of the last resolution attempt for a static path. */
+export function getLastOutcome(path: string): ResolveOutcome | undefined {
+  return outcomes.get(path.replace(/^\/+/, '').replace(/\.json$/, ''));
+}
+
+/** Layered read + why it ended the way it did (used by detail pages). */
+export async function getContentResolved<T = unknown>(
+  path: string,
+  opts: GetContentOptions<T> = {},
+): Promise<{ data: T | null; outcome: ResolveOutcome }> {
+  const data = await getContent<T>(path, opts);
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const outcome = outcomes.get(key) ?? (data != null ? 'hit' : 'unavailable');
+  return { data, outcome };
+}
+
+/** True when the manifest published by the generator lists this path. */
+export async function isPathPublished(path: string): Promise<boolean | null> {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const m = await getManifest();
+  if (!m) return null; // manifest itself unavailable → unknown
+  return !!m.entities?.[key];
+}
+
+/**
  * Layered fetcher — the ONLY sanctioned way to read static content.
  * memory → browser HTTP cache → IndexedDB → CDN → database (last resort).
  */
@@ -315,12 +360,16 @@ export async function getContent<T = unknown>(
 ): Promise<T | null> {
   // Feature guard: a disabled module fetches nothing at all — no CDN request,
   // no IndexedDB read, no Supabase fallback.
-  if (!isStaticPathAllowed(path)) return null;
+  if (!isStaticPathAllowed(path)) {
+    setOutcome(path.replace(/^\/+/, '').replace(/\.json$/, ''), 'blocked');
+    return null;
+  }
 
   if (!STATIC_CDN.base) {
     // No CDN configured — use fallback directly, mark as supabase.
     return runFallback(path, opts.fallback);
   }
+
 
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
