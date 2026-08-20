@@ -5,7 +5,7 @@
 //
 // See src/lib/cdnGuard.ts for the layered fetcher.
 
-import { getContent, markViolation } from './cdnGuard';
+import { getContent, getContentResolved, isPathPublished, markViolation } from './cdnGuard';
 import { productStaticPath } from './productShard';
 
 export type ListKind = 'latest' | 'featured' | 'popular' | 'discounted' | 'trending' | 'popular-week';
