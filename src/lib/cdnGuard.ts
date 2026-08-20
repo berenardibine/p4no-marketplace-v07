@@ -25,6 +25,9 @@ import { guardFallback, markMissing, isKnownMissing, clearMissing } from './stam
 // Exponential backoff for self-heal retries after 404.
 const HEAL_RETRIES = [800, 2000, 4500] as const;
 
+// Transient-network retries for the CDN fetch itself (cold-start protection).
+const NET_RETRIES = [250, 700] as const;
+
 export type CDNSource = 'browser' | 'cdn' | 'blob' | 'supabase';
 
 interface Envelope<T> {
@@ -306,6 +309,51 @@ function servedFromBrowserCache(url: string): boolean {
 }
 
 /**
+ * Resolution outcome for the last completed read of a path.
+ *  hit         → payload delivered (any layer)
+ *  missing     → origin answered 404 and no cached copy exists → genuinely absent
+ *  unavailable → network/CORS/abort/timeout, or CDN 5xx → delivery failed, product
+ *                existence is UNKNOWN (must never render "not found")
+ *  blocked     → feature flag disabled this path
+ */
+export type ResolveOutcome = 'hit' | 'missing' | 'unavailable' | 'blocked';
+
+const outcomes = new Map<string, ResolveOutcome>();
+const OUTCOME_MAX = 500;
+
+function setOutcome(key: string, o: ResolveOutcome) {
+  if (outcomes.size >= OUTCOME_MAX) {
+    const oldest = outcomes.keys().next().value as string | undefined;
+    if (oldest) outcomes.delete(oldest);
+  }
+  outcomes.set(key, o);
+}
+
+/** Outcome of the last resolution attempt for a static path. */
+export function getLastOutcome(path: string): ResolveOutcome | undefined {
+  return outcomes.get(path.replace(/^\/+/, '').replace(/\.json$/, ''));
+}
+
+/** Layered read + why it ended the way it did (used by detail pages). */
+export async function getContentResolved<T = unknown>(
+  path: string,
+  opts: GetContentOptions<T> = {},
+): Promise<{ data: T | null; outcome: ResolveOutcome }> {
+  const data = await getContent<T>(path, opts);
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const outcome = outcomes.get(key) ?? (data != null ? 'hit' : 'unavailable');
+  return { data, outcome };
+}
+
+/** True when the manifest published by the generator lists this path. */
+export async function isPathPublished(path: string): Promise<boolean | null> {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const m = await getManifest();
+  if (!m) return null; // manifest itself unavailable → unknown
+  return !!m.entities?.[key];
+}
+
+/**
  * Layered fetcher — the ONLY sanctioned way to read static content.
  * memory → browser HTTP cache → IndexedDB → CDN → database (last resort).
  */
@@ -315,12 +363,16 @@ export async function getContent<T = unknown>(
 ): Promise<T | null> {
   // Feature guard: a disabled module fetches nothing at all — no CDN request,
   // no IndexedDB read, no Supabase fallback.
-  if (!isStaticPathAllowed(path)) return null;
+  if (!isStaticPathAllowed(path)) {
+    setOutcome(path.replace(/^\/+/, '').replace(/\.json$/, ''), 'blocked');
+    return null;
+  }
 
   if (!STATIC_CDN.base) {
     // No CDN configured — use fallback directly, mark as supabase.
     return runFallback(path, opts.fallback);
   }
+
 
 
   const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
@@ -329,6 +381,7 @@ export async function getContent<T = unknown>(
   const mem = memory.get(key);
   if (mem && Date.now() - mem.at < MEMORY_TTL_MS) {
     recordTraffic({ path: key, layer: 'memory', bytes: 0, ms: 0, at: Date.now() });
+    setOutcome(key, 'hit');
     return unwrap<T>(mem.data);
   }
 
@@ -355,22 +408,40 @@ export async function getContent<T = unknown>(
       memPut(key, cached.data, cached.version);
       record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
       recordTraffic({ path: key, layer: 'idb', bytes: 0, ms: Date.now() - started, at: Date.now() });
+      setOutcome(key, 'hit');
       return payload;
     }
 
 
-    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it)
+    // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it).
+    //    Transient failures (network error / 5xx) are retried before we ever
+    //    conclude anything about whether the content exists.
+    let lastError = false;
     try {
       const url = cdnUrl(key);
-      const res = await fetch(url, {
-        headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
-      });
+      let res: Response | null = null;
+      for (let attempt = 0; attempt < NET_RETRIES.length + 1; attempt++) {
+        try {
+          res = await fetch(url, {
+            headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
+          });
+          if (res.status < 500) break;
+        } catch {
+          res = null;
+        }
+        lastError = true;
+        if (attempt < NET_RETRIES.length) {
+          await new Promise((r) => setTimeout(r, NET_RETRIES[attempt]));
+        }
+      }
+      if (!res) throw new Error('cdn-unreachable');
       const ms = Date.now() - started;
 
       if (res.status === 304 && cached) {
         record({ path: key, source: 'cdn', ms, status: 304, at: Date.now() });
         recordTraffic({ path: key, layer: 'browser', bytes: 0, ms, at: Date.now(), missReason: 'idb-version-stale' });
         memPut(key, cached.data, cached.version);
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
 
@@ -389,6 +460,7 @@ export async function getContent<T = unknown>(
           at: Date.now(),
           missReason: cached ? 'version-bump' : 'cold-cache',
         });
+        setOutcome(key, 'hit');
         return payload;
       }
 
@@ -410,6 +482,7 @@ export async function getContent<T = unknown>(
                 memPut(key, env, version);
                 record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
                 recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
+                setOutcome(key, 'hit');
                 return payload;
               }
             } catch { /* keep retrying */ }
@@ -421,9 +494,13 @@ export async function getContent<T = unknown>(
       if (cached) {
         record({ path: key, source: 'browser', ms, status: 200, at: Date.now() });
         recordTraffic({ path: key, layer: 'idb', bytes: 0, ms, at: Date.now(), missReason: 'stale-while-missing' });
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
 
+      // A 404 from the origin is the ONLY evidence that content is absent.
+      // Anything else (5xx, blocked, unreachable) leaves existence unknown.
+      setOutcome(key, res.status === 404 && !lastError ? 'missing' : 'unavailable');
 
       // 6) STRICT mode: refuse Supabase fallback. Queue regen, log violation, return null.
       if (isStrictStaticMode()) {
@@ -438,10 +515,13 @@ export async function getContent<T = unknown>(
     } catch {
       if (cached) {
         record({ path: key, source: 'browser', ms: Date.now() - started, status: 200, at: Date.now() });
+        setOutcome(key, 'hit');
         return unwrap<T>(cached.data);
       }
+      setOutcome(key, 'unavailable');
       return runFallback<T>(key, opts.fallback);
     }
+
   })();
 
   inFlight.set(key, p);

@@ -5,7 +5,7 @@
 //
 // See src/lib/cdnGuard.ts for the layered fetcher.
 
-import { getContent, markViolation } from './cdnGuard';
+import { getContent, getContentResolved, isPathPublished, markViolation } from './cdnGuard';
 import { productStaticPath } from './productShard';
 
 export type ListKind = 'latest' | 'featured' | 'popular' | 'discounted' | 'trending' | 'popular-week';
@@ -51,6 +51,39 @@ export async function getCachedProductDetail(slug: string) {
   if (sharded) return sharded;
   return getContent<any>(`product/${slug}`);
 }
+
+/**
+ * Resolved product detail read: distinguishes a genuinely missing product
+ * (origin 404 + not published in the manifest) from a delivery failure
+ * (offline / CDN error / manifest unavailable). Cold browsers must never see
+ * "Product Not Found" because of a transient delivery problem.
+ */
+export async function resolveProductDetail(slug: string): Promise<{
+  product: any | null;
+  outcome: 'hit' | 'missing' | 'unavailable' | 'blocked';
+  path: string;
+}> {
+  const path = await productStaticPath(slug);
+  const primary = await getContentResolved<any>(path);
+  if (primary.data) return { product: primary.data, outcome: 'hit', path };
+
+  // Legacy flat path for files generated before sharding.
+  const legacy = await getContentResolved<any>(`product/${slug}`);
+  if (legacy.data) return { product: legacy.data, outcome: 'hit', path: `product/${slug}` };
+
+  // Only trust "missing" when both reads got a definitive 404 AND the published
+  // manifest agrees the path does not exist.
+  const definitive = primary.outcome === 'missing' && legacy.outcome === 'missing';
+  if (definitive) {
+    const published = await isPathPublished(path);
+    if (published === true) return { product: null, outcome: 'unavailable', path };
+    if (published === null) return { product: null, outcome: 'unavailable', path };
+    return { product: null, outcome: 'missing', path };
+  }
+  if (primary.outcome === 'blocked') return { product: null, outcome: 'blocked', path };
+  return { product: null, outcome: 'unavailable', path };
+}
+
 
 export async function getCachedHomepage() {
   const [featured, latest, popular, categories] = await Promise.all([
