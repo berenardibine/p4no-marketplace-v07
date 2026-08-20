@@ -109,7 +109,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const { product, loading, error, isSlugBased } = useProductBySlug(slugOrId);
+  const { product, loading, status, isSlugBased, refetch } = useProductBySlug(slugOrId);
   const [currentImage, setCurrentImage] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -213,9 +213,10 @@ const ProductDetail = () => {
     return <ProductLoader />;
   }
 
-  // Show not found if product doesn't exist or there was an error
-  if (!product || error) {
-    return <ProductNotFound />;
+  // Only a definitive miss renders "not found"; delivery failures get a retry.
+  if (!product) {
+    if (status === 'not_found') return <ProductNotFound />;
+    return <ProductUnavailable onRetry={() => void refetch()} />;
   }
 
   const images = product.images?.length > 0 ? product.images : ['/placeholder.svg'];
