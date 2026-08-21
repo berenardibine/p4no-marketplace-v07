@@ -413,10 +413,41 @@ export async function getContent<T = unknown>(
     }
 
 
+    // 2b) MANIFEST AUTHORITY — the published manifest is the source of truth for
+    //     existence. When it loaded successfully and does not list this key, the
+    //     file is definitively absent: skip the CDN fetch entirely.
+    //
+    //     This matters because the static origin serves 404s WITHOUT CORS headers,
+    //     so a missing file makes `fetch` reject with a TypeError instead of
+    //     returning status 404. Without this gate the guard spent the network
+    //     retries plus the 404 self-heal backoff (~7s per path) and still ended up
+    //     classifying a genuine miss as "unavailable" — which is exactly what made
+    //     product pages hang and then show "Taking longer than usual".
+    const manifestUsable = !!manifest && !!manifest.entities && Object.keys(manifest.entities).length > 0;
+    if (manifestUsable && !expectedVersion && !cached) {
+      setOutcome(key, 'missing');
+      markMissing(key);
+      recordTraffic({
+        path: key,
+        layer: 'memory',
+        bytes: 0,
+        ms: Date.now() - started,
+        at: Date.now(),
+        missReason: 'manifest-not-published',
+      });
+      if (isStrictStaticMode()) {
+        const meta = entityFromPath(key);
+        if (meta) void tryRegenerate(meta.entity, meta.slug);
+        return null;
+      }
+      return runFallback<T>(key, opts.fallback);
+    }
+
     // 3) CDN fetch (L2 browser HTTP cache is transparently in front of it).
     //    Transient failures (network error / 5xx) are retried before we ever
     //    conclude anything about whether the content exists.
     let lastError = false;
+
     try {
       const url = cdnUrl(key);
       let res: Response | null = null;
