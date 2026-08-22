@@ -30,6 +30,26 @@ const POLLING_THRESHOLD = 10; // >10 reads/min to same table = suspicious
 // Retired modules: tables that MUST receive zero traffic. Any hit is a defect
 // and is surfaced in the Unified Traffic & Cache Monitor diagnostics.
 const RETIRED_TABLES = new Set(['product_likes']);
+
+// -------------------- Sanctioned last-resort reads --------------------
+// Strict mode blocks public-table reads at the network layer. A page that has
+// exhausted the whole static hierarchy (memory → IDB → CDN → generator queue)
+// may grant itself ONE read so a delivery failure never renders a false 404.
+// Grants are single-use and per table, so they cannot become a traffic source.
+const lastResortGrants = new Map<string, number>();
+
+export function allowLastResortRead(table: string, n = 1): void {
+  lastResortGrants.set(table, (lastResortGrants.get(table) ?? 0) + n);
+}
+
+function consumeLastResort(table: string): boolean {
+  const left = lastResortGrants.get(table) ?? 0;
+  if (left <= 0) return false;
+  if (left === 1) lastResortGrants.delete(table);
+  else lastResortGrants.set(table, left - 1);
+  return true;
+}
+
 interface RetiredHit { table: string; method: string; route: string; at: number; stack: string }
 const retiredHits: RetiredHit[] = [];
 const retiredCounts = new Map<string, number>();
