@@ -64,45 +64,47 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
       }
     }
 
-    // 2) Recently published? Ask the generator queue and wait for the manifest
-    //    bump instead of touching PostgREST.
-    try {
-      const built = await waitForPath(await productStaticPath(slugOrId));
-      if (built) {
-        const retry = await resolveProductDetail(slugOrId);
-        if (!alive()) return;
-        if (retry.product) {
-          setProduct(retry.product as unknown as Product);
-          setStatus('found');
-          return;
+    // 2) Definitively absent from the manifest? It may have been published a
+    //    moment ago — ask the generator queue and wait for the manifest bump.
+    //    A delivery failure ('unavailable') is NOT queue-related, so we never
+    //    spend the edge-function round trip on it.
+    if (lastOutcome === 'missing') {
+      try {
+        const built = await waitForPath(await productStaticPath(slugOrId), 4000);
+        if (built) {
+          const retry = await resolveProductDetail(slugOrId);
+          if (!alive()) return;
+          if (retry.product) {
+            setProduct(retry.product as unknown as Product);
+            setStatus('found');
+            return;
+          }
+          lastOutcome = retry.outcome;
         }
-        lastOutcome = retry.outcome;
-      }
-    } catch { /* fall through */ }
+      } catch { /* fall through */ }
+    }
 
-    // 3) Static layer genuinely cannot resolve the product.
-    if (REDIS_ONLY || isStrictStaticMode()) {
-      if (!alive()) return;
-      recordTraffic({
-        path: `product-detail/${slugOrId}`,
-        layer: 'memory',
-        bytes: 0,
-        ms: Date.now() - startedAt,
-        at: Date.now(),
-        missReason: `product-detail-${lastOutcome}`,
-      });
-      if (lastOutcome === 'missing') {
-        setProduct(null);
-        setError('Product not found');
-        setStatus('not_found');
-      } else {
-        // Delivery failed — existence unknown. Never claim "not found".
-        setProduct(null);
-        setError('We could not load this product right now.');
-        setStatus('error');
-      }
+    // 3) Static delivery could not produce the product. A visitor must still be
+    //    able to read the page, so a SINGLE coalesced database read is allowed
+    //    as the genuine last resort — even in strict mode. It is deduplicated
+    //    per slug by the stampede guard, so a traffic spike cannot turn this
+    //    into an egress problem.
+    if (!alive()) return;
+    recordTraffic({
+      path: `product-detail/${slugOrId}`,
+      layer: 'memory',
+      bytes: 0,
+      ms: Date.now() - startedAt,
+      at: Date.now(),
+      missReason: `product-detail-${lastOutcome}`,
+    });
+    if (lastOutcome === 'blocked') {
+      setProduct(null);
+      setError('Product not found');
+      setStatus('not_found');
       return;
     }
+
 
     // 4) Non-strict deployments only: single, coalesced database fallback.
     try {
