@@ -111,6 +111,10 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
       const { data, error: fetchError } = await coalesce(
         `product-detail-db:${slugOrId}`,
         async () => {
+          // Strict mode blocks public reads at the network layer; grant this
+          // single read so a delivery failure cannot fake a missing product.
+          allowLastResortRead('products');
+
           let query = supabase
             .from('products')
             .select(`
