@@ -5,6 +5,8 @@ import { resolveProductDetail } from '@/lib/productCache';
 import { waitForPath } from '@/lib/staticCDN';
 import { productStaticPath } from '@/lib/productShard';
 import { coalesce } from '@/lib/stampede';
+import { allowLastResortRead } from '@/lib/apiFirewall';
+
 import { recordTraffic } from '@/lib/trafficTelemetry';
 
 
