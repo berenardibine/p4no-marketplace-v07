@@ -239,14 +239,16 @@ function selfHealEnabled(): boolean {
   return (window as unknown as { __P4NO_SELFHEAL__?: boolean }).__P4NO_SELFHEAL__ === true;
 }
 
-async function tryRegenerate(entity: string, slug?: string) {
-  if (!selfHealEnabled()) return;
+async function tryRegenerate(entity: string, slug?: string): Promise<boolean> {
+  if (!selfHealEnabled()) return false;
   try {
     await supabase.functions.invoke('static-generate', {
       body: slug ? { entity, slug } : { entity },
     });
-  } catch { /* ignore */ }
+    return true;
+  } catch { return false; }
 }
+
 
 function entityFromPath(path: string): { entity: string; slug?: string } | null {
   const p = path.replace(/^\/+/, '').replace(/\.json$/, '');
