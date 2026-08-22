@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Product } from './useProducts';
 import { resolveProductDetail } from '@/lib/productCache';
-import { REDIS_ONLY } from '@/lib/cacheFlags';
 import { waitForPath } from '@/lib/staticCDN';
-import { isStrictStaticMode } from '@/lib/staticFlags';
 import { productStaticPath } from '@/lib/productShard';
+import { coalesce } from '@/lib/stampede';
 import { recordTraffic } from '@/lib/trafficTelemetry';
+
 
 export type ProductStatus = 'loading' | 'found' | 'not_found' | 'error';
 
