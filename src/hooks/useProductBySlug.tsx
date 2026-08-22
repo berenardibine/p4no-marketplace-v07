@@ -14,8 +14,10 @@ export type ProductStatus = 'loading' | 'found' | 'not_found' | 'error';
 
 // Cold-start protection: a fresh device has no memory/IDB copy, so the very
 // first static read is the only thing standing between the visitor and the
-// page. Transient failures are retried before we conclude anything.
-const RESOLVE_RETRIES = [400, 1200, 2500] as const;
+// page. One short retry covers a genuinely transient hiccup; beyond that the
+// static layer is failing and waiting longer only hurts the visitor.
+const RESOLVE_RETRIES = [400] as const;
+
 
 export const useProductBySlug = (slugOrId: string | undefined) => {
   const [product, setProduct] = useState<Product | null>(null);
