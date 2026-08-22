@@ -106,21 +106,27 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
     }
 
 
-    // 4) Non-strict deployments only: single, coalesced database fallback.
+    // 4) Last-resort database read — one shared query per slug.
     try {
-      let query = supabase
-        .from('products')
-        .select(`
-          *,
-          seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number, identity_verified),
-          shop:shops(id, name, logo_url, trading_center, slug)
-        `);
+      const { data, error: fetchError } = await coalesce(
+        `product-detail-db:${slugOrId}`,
+        async () => {
+          let query = supabase
+            .from('products')
+            .select(`
+              *,
+              seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number, identity_verified),
+              shop:shops(id, name, logo_url, trading_center, slug)
+            `);
 
-      if (isUUID) query = query.eq('id', slugOrId);
-      else query = query.eq('slug', slugOrId);
+          if (isUUID) query = query.eq('id', slugOrId);
+          else query = query.eq('slug', slugOrId);
 
-      const { data, error: fetchError } = await query.maybeSingle();
+          return query.maybeSingle();
+        },
+      );
       if (!alive()) return;
+
 
       recordTraffic({
         path: `product-detail/${slugOrId}`,
