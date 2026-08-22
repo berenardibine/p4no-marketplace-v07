@@ -166,16 +166,25 @@ export function installApiFirewall() {
     }
 
     // Strict-mode block: refuse public-content reads at the network layer.
+    // Exception: an explicitly sanctioned last-resort read (see
+    // allowLastResortRead) is let through. Static delivery can fail for reasons
+    // that have nothing to do with whether the content exists, and silently
+    // answering `[]` turns a delivery failure into a false "not found".
     if (isRead && isStrictStaticMode() && isPublicTable(table)) {
-      stat.blocked += 1;
-      totalBlocked += 1;
-      markViolation(`rest:${table}`, 'firewall-blocked');
-      // Return an empty PostgREST-compatible response so callers don't crash.
-      return new Response('[]', {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      if (consumeLastResort(table)) {
+        markViolation(`rest:${table}`, 'last-resort-read');
+      } else {
+        stat.blocked += 1;
+        totalBlocked += 1;
+        markViolation(`rest:${table}`, 'firewall-blocked');
+        // Return an empty PostgREST-compatible response so callers don't crash.
+        return new Response('[]', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
     }
+
 
     // Feature Guard: a disabled module's exclusive tables get ZERO traffic
     // (reads AND writes), no matter which code path attempted the call.
