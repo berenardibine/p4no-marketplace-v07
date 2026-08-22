@@ -239,14 +239,16 @@ function selfHealEnabled(): boolean {
   return (window as unknown as { __P4NO_SELFHEAL__?: boolean }).__P4NO_SELFHEAL__ === true;
 }
 
-async function tryRegenerate(entity: string, slug?: string) {
-  if (!selfHealEnabled()) return;
+async function tryRegenerate(entity: string, slug?: string): Promise<boolean> {
+  if (!selfHealEnabled()) return false;
   try {
     await supabase.functions.invoke('static-generate', {
       body: slug ? { entity, slug } : { entity },
     });
-  } catch { /* ignore */ }
+    return true;
+  } catch { return false; }
 }
+
 
 function entityFromPath(path: string): { entity: string; slug?: string } | null {
   const p = path.replace(/^\/+/, '').replace(/\.json$/, '');
@@ -496,30 +498,35 @@ export async function getContent<T = unknown>(
       }
 
       if (res.status === 404) {
-        // 4) Regenerate + retry CDN with exponential backoff (up to 3 tries)
+        // 4) Regenerate + retry CDN — ONLY when a regeneration was actually
+        //    triggered. Public visitors cannot self-heal, so waiting out the
+        //    backoff for them just stalls the page for ~7s with no upside.
         if (!regenerated.has(key)) {
           regenerated.add(key);
           const meta = entityFromPath(key);
-          if (meta) await tryRegenerate(meta.entity, meta.slug);
-          for (const delay of HEAL_RETRIES) {
-            await new Promise((r) => setTimeout(r, delay));
-            try {
-              const retry = await fetch(cdnUrl(key), { cache: 'no-store' });
-              if (retry.ok) {
-                const env = (await retry.json()) as Envelope<T> | T;
-                const payload = unwrap<T>(env);
-                const version = (env as Envelope<T>)?.v ?? Date.now();
-                await idbPut(key, env, version);
-                memPut(key, env, version);
-                record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
-                recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
-                setOutcome(key, 'hit');
-                return payload;
-              }
-            } catch { /* keep retrying */ }
+          const queued = meta ? await tryRegenerate(meta.entity, meta.slug) : false;
+          if (queued) {
+            for (const delay of HEAL_RETRIES) {
+              await new Promise((r) => setTimeout(r, delay));
+              try {
+                const retry = await fetch(cdnUrl(key), { cache: 'no-store' });
+                if (retry.ok) {
+                  const env = (await retry.json()) as Envelope<T> | T;
+                  const payload = unwrap<T>(env);
+                  const version = (env as Envelope<T>)?.v ?? Date.now();
+                  await idbPut(key, env, version);
+                  memPut(key, env, version);
+                  record({ path: key, source: 'blob', ms: Date.now() - started, status: retry.status, at: Date.now() });
+                  recordTraffic({ path: key, layer: 'cdn', bytes: approxBytes(env), ms: Date.now() - started, at: Date.now(), missReason: 'regenerated-404' });
+                  setOutcome(key, 'hit');
+                  return payload;
+                }
+              } catch { /* keep retrying */ }
+            }
           }
         }
       }
+
 
       // 5) Stale IDB → return it while we recover
       if (cached) {
