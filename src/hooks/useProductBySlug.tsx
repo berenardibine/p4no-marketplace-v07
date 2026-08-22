@@ -151,12 +151,17 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
         setStatus('error');
         return;
       }
-      if (!data) {
+      // Not published (blocked / draft / sold-out states) counts as absent —
+      // the static generator only publishes active products, so the fallback
+      // must apply the same rule.
+      const publishable = !!data && ((data as any).status ?? 'active') === 'active';
+      if (!publishable) {
         setError('Product not found');
         setProduct(null);
         setStatus('not_found');
         return;
       }
+
       setProduct(data as unknown as Product);
       setStatus('found');
     } catch (err: any) {
