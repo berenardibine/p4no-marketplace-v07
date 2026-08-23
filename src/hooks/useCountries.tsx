@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { cachedQuery } from '@/lib/queryCache';
-import { getContent } from '@/lib/cdnGuard';
 
 export interface Country {
   id: string;
@@ -15,19 +14,24 @@ export interface Country {
 
 // Countries are slow-changing reference data (~200 rows). `select('*')` on every
 // mount was one of the largest confirmed public egress sources (~37.8 KB /
-// session). Delivery now follows the standard hierarchy:
+// session).
 //
-//   memory → browser HTTP cache → IndexedDB → CDN static JSON → PostgREST
+// NOTE: this hook previously optimistically requested `reference/countries.json`
+// from the static CDN — but the static generator has never produced that file
+// (it is absent from the published manifest), so the layer was dead weight and,
+// whenever the manifest itself failed to load, surfaced as a CORS-opaque 404 in
+// the console. The static hop has been removed: the delivery path is now
 //
-// getContent() implements those layers and reports the layer that actually
-// served the read to telemetry. cachedQuery() adds a 7-day localStorage
-// answer + single-flight, so repeat sessions issue no request at all.
+//   memory (cachedQuery single-flight) → localStorage (7-day TTL) → PostgREST
+//
+// i.e. at most ONE trimmed PostgREST read per device per week. This is exactly
+// what the old code did in practice, since the manifest gate always routed to
+// the fallback anyway.
 const COLUMNS = 'id,name,iso_code,currency_code,currency_symbol,phone_code,is_active';
 const CACHE_KEY = 'countries:v3';
-const STATIC_PATH = 'reference/countries';
 const TTL = 7 * 24 * 60 * 60 * 1000;
 
-/** Last-resort PostgREST read: trimmed to only the columns the UI renders. */
+/** PostgREST read, trimmed to only the columns the UI renders. */
 async function fetchCountriesFromDb(): Promise<Country[]> {
   const { data, error } = await supabase
     .from('countries')
@@ -38,18 +42,13 @@ async function fetchCountriesFromDb(): Promise<Country[]> {
   return (data as Country[]) ?? [];
 }
 
-async function loadCountries(): Promise<Country[]> {
-  const rows = await getContent<Country[]>(STATIC_PATH, { fallback: fetchCountriesFromDb });
-  return Array.isArray(rows) ? rows : [];
-}
-
 export const useCountries = () => {
   const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = async (force = false) => {
     try {
-      const data = await cachedQuery(CACHE_KEY, loadCountries, { ttlMs: force ? 0 : TTL });
+      const data = await cachedQuery(CACHE_KEY, fetchCountriesFromDb, { ttlMs: force ? 0 : TTL });
       setCountries(data);
     } catch (err) {
       console.error('Error fetching countries:', err);
@@ -79,5 +78,3 @@ export const useCountries = () => {
     refetch: () => load(true),
   };
 };
-
-export default useCountries;
