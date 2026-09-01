@@ -26,7 +26,6 @@ import StructuredProductDescription, { ProductFaqJsonLd, type StructuredDescript
 import RecentlyViewed from "@/components/home/RecentlyViewed";
 import { trackBrowsingHistory } from "@/hooks/useBrowsingHistory";
 import { trackInterest } from "@/lib/trackInterest";
-import AIRecommendations from "@/components/products/AIRecommendations";
 import SellerRatingModal from "@/components/products/SellerRatingModal";
 import SellerRatingDisplay from "@/components/products/SellerRatingDisplay";
 import { useSellerReviews } from "@/hooks/useSellerReviews";
@@ -42,7 +41,6 @@ import { useRequireAuth } from "@/hooks/useRequireAuth";
 import FeatureGate from "@/components/system/FeatureGate";
 import GuestPromptDialog from "@/components/auth/GuestPromptDialog";
 import { Lock } from "lucide-react";
-import RelatedProducts from "@/components/products/RelatedProducts";
 import { useLoader } from "@/hooks/useLoader";
 import DeferUntilVisible from "@/components/util/DeferUntilVisible";
 
@@ -866,23 +864,11 @@ const ProductDetail = () => {
           </div>
           <QAJsonLd productId={product.id} productName={product.title} />
 
-
-          {/* AI Recommendations */}
-          <div className="pt-4">
-            <DeferUntilVisible minHeight={160}>
-              <AIRecommendations productId={product.id} />
-            </DeferUntilVisible>
-          </div>
         </div>
           </div>{/* /right col */}
         </div>{/* /desktop grid */}
 
-        {/* Related products — full width */}
-        <div className="px-4 lg:max-w-7xl lg:mx-auto lg:px-6 mt-6">
-          <DeferUntilVisible minHeight={200}>
-            <RelatedProducts productId={product.id} category={product.category} />
-          </DeferUntilVisible>
-        </div>
+
 
         {/* Report Modal */}
         <ReportModal
