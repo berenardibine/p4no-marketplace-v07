@@ -866,23 +866,11 @@ const ProductDetail = () => {
           </div>
           <QAJsonLd productId={product.id} productName={product.title} />
 
-
-          {/* AI Recommendations */}
-          <div className="pt-4">
-            <DeferUntilVisible minHeight={160}>
-              <AIRecommendations productId={product.id} />
-            </DeferUntilVisible>
-          </div>
         </div>
           </div>{/* /right col */}
         </div>{/* /desktop grid */}
 
-        {/* Related products — full width */}
-        <div className="px-4 lg:max-w-7xl lg:mx-auto lg:px-6 mt-6">
-          <DeferUntilVisible minHeight={200}>
-            <RelatedProducts productId={product.id} category={product.category} />
-          </DeferUntilVisible>
-        </div>
+
 
         {/* Report Modal */}
         <ReportModal
