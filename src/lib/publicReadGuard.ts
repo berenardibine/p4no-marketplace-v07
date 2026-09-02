@@ -23,8 +23,11 @@ const PUBLIC_TABLES = new Set<string>([
   'categories',
   'service_categories',
   'insight_categories',
-  'shops',
+  // NOTE: `shops` is intentionally NOT guarded. Shop pages, the seller
+  // dashboard and admin Shop Management read shops directly from PostgREST;
+  // guarding it made every shop read return `[]` (0 shops everywhere).
 ]);
+
 
 export function isPublicTable(name: string): boolean {
   return PUBLIC_TABLES.has(name);
