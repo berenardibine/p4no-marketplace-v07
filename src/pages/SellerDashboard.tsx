@@ -3,9 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   ArrowLeft, Store, Package, Plus, MessageSquare, Bell,
   Settings, ChevronRight, Phone,
-  Menu, X, Home, Gift,
+  Menu, X, Home,
   Zap, Briefcase, Inbox,
-  Sparkles, Rocket, Shield, AlertTriangle, Share2, ListChecks, Wallet,
+  Sparkles, Rocket, Shield, AlertTriangle, Share2,
   ShoppingCart, BarChart3, Eye, MousePointerClick
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
