@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import {
   User, Store, Heart, Settings, Phone, LogOut, LogIn,
   ChevronRight, Shield, Bell, HelpCircle, ArrowLeft, Home,
-  FileText, ShieldCheck, ScrollText, Info, Briefcase, Newspaper
+  FileText, ShieldCheck, ScrollText, Info, Briefcase, Newspaper,
+  ListChecks, Wallet, Gift
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,9 @@ const MenuPage = () => {
   const authMenuItems = [
     { icon: User, label: "My Account", href: "/account", color: "bg-blue-500" },
     { icon: Store, label: "My Shop", href: "/my-shop", sellerOnly: true, color: "bg-green-500" },
+    { icon: ListChecks, label: "Tasks", href: "/tasks", color: "bg-cyan-500" },
+    { icon: Wallet, label: "My Wallet", href: "/wallet", color: "bg-emerald-500" },
+    { icon: Gift, label: "Refer & Earn", href: "/referrals", color: "bg-amber-500" },
     { icon: Heart, label: "Favorites", href: "/favorites", color: "bg-pink-500" },
     { icon: Bell, label: "Notifications", href: "/notifications", badgeCount: unreadCount, color: "bg-purple-500" },
   ];

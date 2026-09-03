@@ -56,6 +56,7 @@ import AdminSellerBadges from "./pages/admin/AdminSellerBadges";
 import ReferralDashboard from "./pages/ReferralDashboard";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import WalletPage from "./pages/WalletPage";
+import TasksPage from "./pages/TasksPage";
 import AdminRewardClaims from "./pages/admin/AdminRewardClaims";
 import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminRewardSettings from "./pages/admin/AdminRewardSettings";
@@ -220,6 +221,7 @@ const App = () => {
                 <Route path="/referrals" element={<ProtectedRoute><ReferralDashboard /></ProtectedRoute>} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
                 <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
+                <Route path="/tasks" element={<ProtectedRoute><TasksPage /></ProtectedRoute>} />
                 <Route path="/admin/reward-claims" element={<AdminRewardClaims />} />
                 <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
                 <Route path="/admin/reward-settings" element={<AdminRewardSettings />} />
