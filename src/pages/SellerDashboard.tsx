@@ -459,23 +459,17 @@ const SellerDashboard = () => {
           </div>
         )}
 
-        {/* Wallet Balance */}
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              <span className="text-sm font-medium opacity-90">Wallet Balance</span>
-            </div>
-            <button
-              onClick={() => navigate('/account')}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-xs font-semibold"
-              aria-label="View followers"
-            >
-              <span>{formatNumber(followerCount)}</span>
-              <span className="opacity-90">Followers</span>
-            </button>
+        {/* Followers */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => navigate('/account')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors text-xs font-semibold"
+            aria-label="View followers"
+          >
+            <span>{formatNumber(followerCount)}</span>
+            <span className="text-muted-foreground">Followers</span>
+          </button>
         </div>
-
 
         {/* Weekly Analytics Overview */}
         {weeklyStats && (weeklyStats.weeklyViews > 0 || weeklyStats.weeklyImpressions > 0) && (
@@ -508,9 +502,6 @@ const SellerDashboard = () => {
             </div>
           </div>
         )}
-          <p className="text-3xl font-bold">{walletLoading ? '...' : `${wallet?.balance || 0} pts`}</p>
-          <p className="text-xs opacity-80 mt-1">Earn points from tasks, spend on boosts</p>
-        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card rounded-2xl p-4 border shadow-sm">
