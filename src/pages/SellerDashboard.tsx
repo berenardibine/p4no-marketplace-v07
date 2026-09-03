@@ -3,9 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   ArrowLeft, Store, Package, Plus, MessageSquare, Bell,
   Settings, ChevronRight, Phone,
-  Menu, X, Home, Gift,
+  Menu, X, Home,
   Zap, Briefcase, Inbox,
-  Sparkles, Rocket, Shield, AlertTriangle, Share2, ListChecks, Wallet,
+  Sparkles, Rocket, Shield, AlertTriangle, Share2,
   ShoppingCart, BarChart3, Eye, MousePointerClick
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,15 +17,12 @@ import { useProductRequests } from "@/hooks/useProductRequests";
 import { useToast } from "@/hooks/use-toast";
 import { useIdentityVerification } from "@/hooks/useIdentityVerification";
 import { useAdminSettings } from "@/hooks/useAdminSettings";
-import { useWallet } from "@/hooks/useWallet";
 import ShopForm from "@/components/seller/ShopForm";
 import ProductForm from "@/components/seller/ProductForm";
 import HomeAds from "@/components/home/HomeAds";
 import ProductList from "@/components/seller/ProductList";
 import SellerAchievementsCard from "@/components/badges/SellerAchievementsCard";
 import RequestList from "@/components/seller/RequestList";
-import SellerReferralTab from "@/components/seller/SellerReferralTab";
-import SellerTasksTab from "@/components/seller/SellerTasksTab";
 import SellerOrdersTab from "@/components/seller/SellerOrdersTab";
 import SellerServicesTab from "@/components/seller/SellerServicesTab";
 import { useServiceRequests } from "@/hooks/useServiceRequests";
@@ -47,7 +44,6 @@ const SellerDashboard = () => {
   const twoFactor = useTwoFactor(user?.id);
   const { verification: idVerification, loading: idLoading } = useIdentityVerification(user?.id);
   const { getSetting, loading: settingsLoading } = useAdminSettings();
-  const { wallet, loading: walletLoading } = useWallet();
   const { stats: weeklyStats } = useWeeklyStats();
   const { pendingCount: pendingServiceReq } = useServiceRequests();
   
@@ -203,8 +199,6 @@ const SellerDashboard = () => {
     { id: 'products', label: 'Products', icon: Package, color: 'from-orange-500 to-amber-500', bg: 'bg-orange-50 dark:bg-orange-950/30', description: 'Manage listings' },
     { id: 'shop', label: 'My Shop', icon: Store, color: 'from-purple-500 to-violet-500', bg: 'bg-purple-50 dark:bg-purple-950/30', description: 'Shop settings' },
     { id: 'achievements', label: 'Achievements', icon: Sparkles, color: 'from-amber-400 to-orange-500', bg: 'bg-amber-50 dark:bg-amber-950/30', description: 'Badges & progress' },
-    { id: 'referrals', label: 'Referrals', icon: Gift, color: 'from-amber-500 to-yellow-500', bg: 'bg-amber-50 dark:bg-amber-950/30', description: 'Earn rewards' },
-    { id: 'tasks', label: 'Tasks', icon: ListChecks, color: 'from-blue-500 to-cyan-500', bg: 'bg-blue-50 dark:bg-blue-950/30', description: 'Complete & earn' },
     { id: 'orders', label: 'Orders & Requests', icon: ShoppingCart, color: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50 dark:bg-emerald-950/30', description: 'Customer orders & requests' },
     { id: 'services', label: 'P4NO Connect', icon: Briefcase, color: 'from-pink-500 to-rose-500', bg: 'bg-pink-50 dark:bg-pink-950/30', description: 'My services' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, color: 'from-indigo-500 to-blue-500', bg: 'bg-indigo-50 dark:bg-indigo-950/30', description: 'View performance' },
@@ -304,10 +298,6 @@ const SellerDashboard = () => {
             </Button>
           </div>
         );
-      case 'referrals':
-        return <SellerReferralTab />;
-      case 'tasks':
-        return <SellerTasksTab />;
       case 'orders':
         return (
           <div className="space-y-6">
@@ -459,23 +449,17 @@ const SellerDashboard = () => {
           </div>
         )}
 
-        {/* Wallet Balance */}
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5" />
-              <span className="text-sm font-medium opacity-90">Wallet Balance</span>
-            </div>
-            <button
-              onClick={() => navigate('/account')}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-xs font-semibold"
-              aria-label="View followers"
-            >
-              <span>{formatNumber(followerCount)}</span>
-              <span className="opacity-90">Followers</span>
-            </button>
+        {/* Followers */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => navigate('/account')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted hover:bg-accent transition-colors text-xs font-semibold"
+            aria-label="View followers"
+          >
+            <span>{formatNumber(followerCount)}</span>
+            <span className="text-muted-foreground">Followers</span>
+          </button>
         </div>
-
 
         {/* Weekly Analytics Overview */}
         {weeklyStats && (weeklyStats.weeklyViews > 0 || weeklyStats.weeklyImpressions > 0) && (
@@ -508,9 +492,6 @@ const SellerDashboard = () => {
             </div>
           </div>
         )}
-          <p className="text-3xl font-bold">{walletLoading ? '...' : `${wallet?.balance || 0} pts`}</p>
-          <p className="text-xs opacity-80 mt-1">Earn points from tasks, spend on boosts</p>
-        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-card rounded-2xl p-4 border shadow-sm">
@@ -554,16 +535,6 @@ const SellerDashboard = () => {
                 <Plus className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-xs font-medium">Add</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-auto py-4 flex-col gap-2 rounded-2xl border-2 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all"
-              onClick={() => setActiveModule('referrals')}
-            >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-500 flex items-center justify-center">
-                <Gift className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-xs font-medium">Refer</span>
             </Button>
             <Button 
               variant="outline" 
