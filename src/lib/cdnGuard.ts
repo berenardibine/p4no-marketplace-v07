@@ -19,6 +19,7 @@ import { getManifest } from './staticCDN';
 import { isStaticPathAllowed } from './featureFlags';
 import { supabase } from '@/integrations/supabase/client';
 import { recordTraffic } from './trafficTelemetry';
+import { fetchWithTimeout } from './netFetch';
 import { guardFallback, markMissing, isKnownMissing, clearMissing } from './stampede';
 
 
@@ -455,7 +456,7 @@ export async function getContent<T = unknown>(
       let res: Response | null = null;
       for (let attempt = 0; attempt < NET_RETRIES.length + 1; attempt++) {
         try {
-          res = await fetch(url, {
+          res = await fetchWithTimeout(url, {
             headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
           });
           if (res.status < 500) break;
@@ -509,7 +510,7 @@ export async function getContent<T = unknown>(
             for (const delay of HEAL_RETRIES) {
               await new Promise((r) => setTimeout(r, delay));
               try {
-                const retry = await fetch(cdnUrl(key), { cache: 'no-store' });
+                const retry = await fetchWithTimeout(cdnUrl(key), { cache: 'no-store' });
                 if (retry.ok) {
                   const env = (await retry.json()) as Envelope<T> | T;
                   const payload = unwrap<T>(env);

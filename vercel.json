@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/cdn/(.*)",
+      "destination": "https://dashboard-eight-khaki-55.vercel.app/$1"
+    },
+    {
       "source": "/reels/:slug",
       "has": [
         {
@@ -11,7 +15,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/prerender?path=/reels/:slug"
     },
-    { "source": "/reels/:slug", "destination": "/index.html" },
+    {
+      "source": "/reels/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/connect/provider/slug/:slug",
       "has": [
@@ -23,7 +30,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/prerender?path=/connect/provider/slug/:slug"
     },
-    { "source": "/connect/provider/slug/:slug", "destination": "/index.html" },
+    {
+      "source": "/connect/provider/slug/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/search/:q",
       "has": [
@@ -35,8 +45,14 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/prerender?path=/search/:q"
     },
-    { "source": "/search/:q", "destination": "/index.html" },
-    { "source": "/search/:q/page/:page", "destination": "/index.html" },
+    {
+      "source": "/search/:q",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/search/:q/page/:page",
+      "destination": "/index.html"
+    },
     {
       "source": "/p/:slug",
       "has": [
@@ -48,7 +64,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/og-preview?slug=:slug"
     },
-    { "source": "/p/:slug", "destination": "/index.html" },
+    {
+      "source": "/p/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/c/:slug",
       "has": [
@@ -60,7 +79,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/og-preview?category=:slug"
     },
-    { "source": "/c/:slug", "destination": "/index.html" },
+    {
+      "source": "/c/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/pg/:slug",
       "has": [
@@ -72,7 +94,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/og-preview?page=:slug"
     },
-    { "source": "/pg/:slug", "destination": "/index.html" },
+    {
+      "source": "/pg/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/connect/service/:slug",
       "has": [
@@ -84,7 +109,10 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/og-preview?service=:slug"
     },
-    { "source": "/connect/service/:slug", "destination": "/index.html" },
+    {
+      "source": "/connect/service/:slug",
+      "destination": "/index.html"
+    },
     {
       "source": "/insights/article/:slug",
       "has": [
@@ -96,10 +124,22 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/prerender?path=/insights/article/:slug"
     },
-    { "source": "/insights/article/:slug", "destination": "/index.html" },
-    { "source": "/insights/category/:slug", "destination": "/index.html" },
-    { "source": "/insights/search/:q", "destination": "/index.html" },
-    { "source": "/insights", "destination": "/index.html" },
+    {
+      "source": "/insights/article/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/insights/category/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/insights/search/:q",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/insights",
+      "destination": "/index.html"
+    },
     {
       "source": "/services/:slug",
       "has": [
@@ -111,84 +151,195 @@
       ],
       "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/og-preview?service=:slug"
     },
-    { "source": "/services/:slug", "destination": "/index.html" },
-    { "source": "/sitemap.xml", "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/generate-sitemap" },
-    { "source": "/sitemaps/:type.xml", "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/generate-sitemap?type=:type" },
-    { "source": "/products/:name/by/:seller", "destination": "/index.html" },
-    { "source": "/products/:name", "destination": "/index.html" },
-    { "source": "/product/:slug", "destination": "/index.html" },
-    { "source": "/opportunities/:title/by/:poster", "destination": "/index.html" },
-    { "source": "/opportunities/:title", "destination": "/index.html" },
-    { "source": "/equipment/:name/by/:owner", "destination": "/index.html" },
-    { "source": "/equipment/:name", "destination": "/index.html" },
-    { "source": "/agriculture/:product/by/:farmer", "destination": "/index.html" },
-    { "source": "/agriculture/:product", "destination": "/index.html" },
-    { "source": "/page/:slug", "destination": "/index.html" },
-    { "source": "/category/:slug", "destination": "/index.html" },
-    { "source": "/shop/:id", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/services/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/generate-sitemap"
+    },
+    {
+      "source": "/sitemaps/:type.xml",
+      "destination": "https://tsrnmrnfmvsivnvdkqrj.supabase.co/functions/v1/generate-sitemap?type=:type"
+    },
+    {
+      "source": "/products/:name/by/:seller",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/products/:name",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/product/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/opportunities/:title/by/:poster",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/opportunities/:title",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/equipment/:name/by/:owner",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/equipment/:name",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/agriculture/:product/by/:farmer",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/agriculture/:product",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/page/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/category/:slug",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/shop/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
+      "source": "/cdn/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=60, s-maxage=60, stale-while-revalidate=600"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
       "source": "/p/:slug",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400"
+        }
       ]
     },
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)\\.js",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)\\.css",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)\\.woff2",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/(.*)\\.png",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=86400"
+        }
       ]
     },
     {
       "source": "/(.*)\\.jpg",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=86400"
+        }
       ]
     },
     {
       "source": "/(.*)\\.svg",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
       ]
     },
     {
       "source": "/sitemap.xml",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=86400" },
-        { "key": "Content-Type", "value": "application/xml" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=86400"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/xml"
+        }
       ]
     },
     {
       "source": "/sitemaps/(.*).xml",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=86400" },
-        { "key": "Content-Type", "value": "application/xml" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=86400"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/xml"
+        }
       ]
     }
   ]
