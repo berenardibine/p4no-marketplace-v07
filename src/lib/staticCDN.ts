@@ -6,6 +6,7 @@
 //   { v: <version>, generated_at: iso, data: <T> }
 
 import { STATIC_CDN } from './staticFlags';
+import { fetchWithTimeout } from './netFetch';
 import { idbGet, idbPut, idbDelete, idbBulkPrune, idbKeys } from './idbCache';
 import { supabase } from '@/integrations/supabase/client';
 import { coalesce, markMissing, isKnownMissing, clearMissing } from './stampede';
@@ -42,7 +43,9 @@ export async function getManifest(force = false): Promise<Manifest | null> {
   manifestFetchedAt = now;
   manifestPromise = (async () => {
     try {
-      const res = await fetch(url('manifest.json'), { cache: 'no-store' });
+      // `?t=` busts the shared CDN edge cache: different edges were pinned to
+      // different manifest versions, which is why some networks saw stale data.
+      const res = await fetchWithTimeout(`${url('manifest.json')}?t=${Date.now()}`, { cache: 'no-store' }, 6000);
       if (!res.ok) return null;
       const m = (await res.json()) as Manifest;
       // On a version bump, prune IDB entries that are no longer in the manifest.
@@ -170,7 +173,7 @@ async function fetchStatic<T>(cleanPath: string): Promise<T | null> {
 
   // Fetch fresh (with ETag from cached version).
   try {
-    const res = await fetch(url(`${cleanPath}.json`), {
+    const res = await fetchWithTimeout(url(`${cleanPath}.json`), {
       headers: cached ? { 'If-None-Match': `"v${cached.version}"` } : undefined,
     });
     if (res.status === 304 && cached) {
@@ -181,7 +184,7 @@ async function fetchStatic<T>(cleanPath: string): Promise<T | null> {
       const healed = await selfHeal(cleanPath);
       if (healed) {
         try {
-          const retry = await fetch(url(`${cleanPath}.json`), { cache: 'no-store' });
+          const retry = await fetchWithTimeout(url(`${cleanPath}.json`), { cache: 'no-store' });
           if (retry.ok) {
             const env = (await retry.json()) as Envelope<T>;
             await idbPut(cleanPath, env, env.v ?? Date.now());

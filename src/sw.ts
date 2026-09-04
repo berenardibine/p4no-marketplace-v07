@@ -18,6 +18,8 @@ cleanupOutdatedCaches();
 // ═══════════════════════════════════════════
 const navigationHandler = new NetworkFirst({
   cacheName: 'navigations',
+  // Never let a cached shell win on a working network; only fall back offline.
+  networkTimeoutSeconds: 5,
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
   ],
@@ -167,6 +169,12 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// A new build must not wait for every tab to close, otherwise users stay trapped
+// on an old bundle/HTML combination.
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

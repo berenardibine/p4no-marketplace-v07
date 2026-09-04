@@ -9,6 +9,14 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      // Mirrors the production `/cdn/*` rewrite so static payloads stay same-origin.
+      "/cdn": {
+        target: "https://dashboard-eight-khaki-55.vercel.app",
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/cdn/, ""),
+      },
+    },
   },
   plugins: [
     react(),

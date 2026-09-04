@@ -25,8 +25,31 @@ const enabledDefault = (v: unknown) => !falsy(v);
 const MASTER = enabledDefault(import.meta.env.VITE_STATIC_CDN);
 const STATIC_ONLY_MASTER = enabledDefault(import.meta.env.VITE_STATIC_ONLY);
 
+const RAW_STATIC_BASE = (import.meta.env.VITE_STATIC_CDN_BASE ?? '').toString().replace(/\/+$/, '');
+
+/**
+ * Static payloads live on a separate *.vercel.app host. Some mobile ISPs blackhole
+ * or DNS-poison that host, so public data never loads there without a VPN, while the
+ * app shell (served from our own domain) loads fine.
+ *
+ * Fix: address the static origin through OUR origin at `/cdn/*` (Vercel rewrite in
+ * production, Vite proxy in dev). Same CDN, same caching, one less host to resolve.
+ */
+function resolveStaticBase(): string {
+  if (!RAW_STATIC_BASE) return '';
+  if (typeof window === 'undefined') return RAW_STATIC_BASE;
+  try {
+    if (new URL(RAW_STATIC_BASE).host === window.location.host) return RAW_STATIC_BASE;
+  } catch {
+    return RAW_STATIC_BASE;
+  }
+  return '/cdn';
+}
+
+export const STATIC_ORIGIN_DIRECT = RAW_STATIC_BASE;
+
 export const STATIC_CDN = {
-  base: (import.meta.env.VITE_STATIC_CDN_BASE ?? '').toString().replace(/\/+$/, ''),
+  base: resolveStaticBase(),
   master: MASTER,
   products: MASTER,
   services: MASTER,
