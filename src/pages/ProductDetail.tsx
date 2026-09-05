@@ -11,8 +11,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useProductBySlug } from "@/hooks/useProductBySlug";
-import { useLinkAnalytics } from "@/hooks/useLinkAnalytics";
-import { useProductViewTracking } from "@/hooks/useProductTracking";
 import ProductMetaTags from "@/components/seo/ProductMetaTags";
 import ProductJsonLd from "@/components/seo/ProductJsonLd";
 import BreadcrumbJsonLd from "@/components/seo/BreadcrumbJsonLd";
@@ -25,7 +23,6 @@ import QAJsonLd from "@/components/seo/QAJsonLd";
 import StructuredProductDescription, { ProductFaqJsonLd, type StructuredDescription } from "@/components/products/StructuredProductDescription";
 import RecentlyViewed from "@/components/home/RecentlyViewed";
 import { trackBrowsingHistory } from "@/hooks/useBrowsingHistory";
-import { trackInterest } from "@/lib/trackInterest";
 import SellerRatingModal from "@/components/products/SellerRatingModal";
 import SellerRatingDisplay from "@/components/products/SellerRatingDisplay";
 import { useSellerReviews } from "@/hooks/useSellerReviews";
@@ -123,22 +120,8 @@ const ProductDetail = () => {
   // Determine ref source from URL params or default to 'direct'
   const refSource = searchParams.get('ref') || 'direct';
 
-  // Track link analytics (existing)
-  useLinkAnalytics(product?.id);
-
-  // Track product view (new impressions/views system)
-  useProductViewTracking(product?.id, refSource);
+  // Public view / impression / link analytics tracking is permanently disabled.
   useEffect(() => { if (product?.id) trackBrowsingHistory('product', product.id); }, [product?.id]);
-  useEffect(() => {
-    if (!product?.id) return;
-    trackInterest({
-      event_type: 'product_view',
-      entity_type: 'product',
-      entity_id: product.id,
-      category: (product as any).category_id ?? null,
-      tags: Array.isArray((product as any).tags) ? (product as any).tags : null,
-    });
-  }, [product?.id]);
 
   // Redirect old ID-based URLs to canonical slug-based URLs
   useEffect(() => {
