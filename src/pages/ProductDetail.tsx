@@ -117,8 +117,6 @@ const ProductDetail = () => {
 
   useLoader('Loading product details…', loading);
 
-  // Determine ref source from URL params or default to 'direct'
-  const refSource = searchParams.get('ref') || 'direct';
 
   // Public view / impression / link analytics tracking is permanently disabled.
   useEffect(() => { if (product?.id) trackBrowsingHistory('product', product.id); }, [product?.id]);

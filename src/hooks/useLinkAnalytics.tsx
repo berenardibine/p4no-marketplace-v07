@@ -102,61 +102,8 @@ const validateClick = (productId: string): { score: number; issues: string[] } =
   return { score: Math.max(0, score), issues };
 };
 
-// Hook to track link analytics
-export const useLinkAnalytics = (productId: string | undefined) => {
-  const { user } = useAuth();
-  
-  const trackView = useCallback(async () => {
-    if (!productId) return;
-    
-    const referrer = document.referrer;
-    const source = detectSource(referrer);
-    const deviceType = detectDeviceType();
-    const browser = detectBrowser();
-    const userAgent = navigator.userAgent;
-    
-    // Validate click for fraud detection
-    const { score, issues } = validateClick(productId);
-    const isValid = score >= 60;
-    
-    try {
-      // Insert analytics record
-      const { data: analyticsRecord, error } = await supabase
-        .from('link_analytics')
-        .insert({
-          product_id: productId,
-          user_id: user?.id || null,
-          source,
-          referrer: referrer || null,
-          user_agent: userAgent,
-          event: 'view',
-          device_type: deviceType,
-          browser,
-          validation_score: score,
-          is_valid: isValid,
-        })
-        .select('id')
-        .single();
-      
-      // If suspicious, log to invalid_clicks
-      if (!isValid && analyticsRecord) {
-        await supabase.from('invalid_clicks').insert({
-          link_analytics_id: analyticsRecord.id,
-          product_id: productId,
-          reason: issues.join(', '),
-          details: { issues, source, deviceType, browser },
-          risk_score: 100 - score,
-        });
-      }
-    } catch (err) {
-      console.error('Failed to track analytics:', err);
-    }
-  }, [productId, user?.id]);
-  
-  useEffect(() => {
-    trackView();
-  }, [trackView]);
-};
+// Public automatic link-analytics writes are permanently disabled.
+export const useLinkAnalytics = (_productId?: string) => {};
 
 // Hook to get analytics data for a product
 export const useProductAnalytics = (productId: string | undefined) => {
