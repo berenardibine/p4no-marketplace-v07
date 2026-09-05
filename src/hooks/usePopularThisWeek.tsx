@@ -100,11 +100,5 @@ export const usePopularThisWeek = (itemType: PopularItemType, limit = 12) => {
   return { items, loading };
 };
 
-// Fire-and-forget weekly view bump
-export const trackWeeklyView = async (itemType: PopularItemType, itemId: string) => {
-  try {
-    await supabase.rpc('increment_weekly_view' as any, { p_item_type: itemType, p_item_id: itemId });
-  } catch (e) {
-    // silent
-  }
-};
+// Public weekly view counting is permanently disabled (no RPC, no DB write).
+export const trackWeeklyView = async (_itemType: PopularItemType, _itemId: string) => {};
