@@ -201,51 +201,13 @@ const getSessionId = () => {
   } catch { return null; }
 };
 
-const ViewTracker = ({ articleId, userId }: { articleId: string; userId: string | null }) => {
-  const rowIdRef = useRef<string | null>(null);
-  const startRef = useRef<number>(Date.now());
-
+// Public article view counting / dwell analytics are permanently disabled.
+// Only local browsing history (device-side) is kept.
+const ViewTracker = ({ articleId }: { articleId: string; userId: string | null }) => {
   useEffect(() => {
     if (!articleId) return;
-    let cancelled = false;
-    const session_id = getSessionId();
-    startRef.current = Date.now();
     import('@/hooks/useBrowsingHistory').then(m => m.trackBrowsingHistory('article', articleId));
-    import('@/hooks/usePopularThisWeek').then(m => m.trackWeeklyView('article', articleId));
-    (async () => {
-      const { data } = await (supabase as any)
-        .from('insight_article_views')
-        .insert({
-          article_id: articleId,
-          user_id: userId,
-          session_id,
-          referrer: document.referrer || null,
-          user_agent: navigator.userAgent.slice(0, 240),
-        })
-        .select('id').single();
-      if (!cancelled && data?.id) rowIdRef.current = data.id;
-    })();
-
-    const flush = () => {
-      const id = rowIdRef.current;
-      if (!id) return;
-      const dwell = Math.min(60 * 60 * 1000, Date.now() - startRef.current);
-      try {
-        (supabase as any).from('insight_article_views')
-          .update({ dwell_ms: dwell }).eq('id', id).then(() => {});
-      } catch {}
-    };
-    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', flush);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', flush);
-      flush();
-    };
-  }, [articleId, userId]);
+  }, [articleId]);
 
   return null;
 };

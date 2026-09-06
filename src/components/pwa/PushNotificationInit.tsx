@@ -25,31 +25,8 @@ const PushNotificationInit = () => {
   const [open, setOpen] = useState(false);
   const [hasServerSub, setHasServerSub] = useState<boolean | null>(null);
 
-  // Never prompt guests. Verify active server-side subscription before considering prompting.
-  useEffect(() => {
-    let cancelled = false;
-    if (!user) {
-      setHasServerSub(null);
-      return;
-    }
-    (async () => {
-      try {
-        const { data, error } = await supabase
-          .from('push_subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
-        if (!cancelled) setHasServerSub(!!data && !error);
-      } catch {
-        if (!cancelled) setHasServerSub(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
+  // Engagement-based prompting is disabled, so we no longer query
+  // push_subscriptions on load. Users enable notifications from settings.
 
   const eligible =
     !!user &&
