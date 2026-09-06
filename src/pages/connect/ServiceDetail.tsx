@@ -35,10 +35,8 @@ const ServiceDetail = () => {
 
   useEffect(() => {
     if (service?.id) {
-      supabase.from('service_views').insert({ service_id: service.id, session_id: crypto.randomUUID() });
-      supabase.from('services').update({ views: (service.views || 0) + 1 }).eq('id', service.id);
+      // Public service view counters / analytics writes are permanently disabled.
       import('@/hooks/useBrowsingHistory').then(m => m.trackBrowsingHistory('service', service.id));
-      import('@/hooks/usePopularThisWeek').then(m => m.trackWeeklyView('service', service.id));
     }
   }, [service?.id]);
 
