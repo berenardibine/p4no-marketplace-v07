@@ -694,7 +694,7 @@ const ProductDetail = () => {
               {!hasReviewed && (
                 <Button
                   size="sm"
-                  onClick={() => setRatingModalOpen(true)}
+                  onClick={() => { setReviewsOpen(true); setRatingModalOpen(true); }}
                   className="w-full mt-3 gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white"
                 >
                   <Star className="h-4 w-4" /> Rate this Seller
