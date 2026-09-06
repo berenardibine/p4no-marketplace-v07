@@ -24,7 +24,8 @@ const getDeviceId = (): string => {
   return deviceId;
 };
 
-export const useSellerReviews = (sellerId?: string) => {
+export const useSellerReviews = (sellerId?: string, options?: { enabled?: boolean }) => {
+  const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const [reviews, setReviews] = useState<SellerReview[]>([]);
   const [averageRating, setAverageRating] = useState(0);
@@ -76,8 +77,9 @@ export const useSellerReviews = (sellerId?: string) => {
   }, [sellerId, user?.id]);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchReviews();
-  }, [fetchReviews]);
+  }, [fetchReviews, enabled]);
 
   const submitReview = async (rating: number, comment?: string) => {
     if (!sellerId) throw new Error('No seller ID');

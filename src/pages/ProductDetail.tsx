@@ -110,8 +110,9 @@ const ProductDetail = () => {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [ratingModalOpen, setRatingModalOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   const sellerId = product?.seller?.id || product?.seller_id;
-  const { averageRating, totalReviews, hasReviewed, submitReview } = useSellerReviews(sellerId);
+  const { averageRating, totalReviews, hasReviewed, submitReview } = useSellerReviews(sellerId, { enabled: reviewsOpen });
   const cart = useCart();
   const { requireAuth, promptOpen, setPromptOpen, isAuthenticated } = useRequireAuth();
 
@@ -674,7 +675,17 @@ const ProductDetail = () => {
                       {product.shop.trading_center}
                     </p>
                   )}
-                  <SellerRatingDisplay averageRating={averageRating} totalReviews={totalReviews} compact />
+                  {reviewsOpen ? (
+                    <SellerRatingDisplay averageRating={averageRating} totalReviews={totalReviews} compact />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setReviewsOpen(true)}
+                      className="text-xs text-primary font-medium underline-offset-2 hover:underline"
+                    >
+                      Show seller reviews
+                    </button>
+                  )}
                 </div>
                 {product.shop?.id && (
                   <FollowButton targetType="shop" targetId={product.shop.id} size="sm" />
@@ -683,7 +694,7 @@ const ProductDetail = () => {
               {!hasReviewed && (
                 <Button
                   size="sm"
-                  onClick={() => setRatingModalOpen(true)}
+                  onClick={() => { setReviewsOpen(true); setRatingModalOpen(true); }}
                   className="w-full mt-3 gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white"
                 >
                   <Star className="h-4 w-4" /> Rate this Seller
