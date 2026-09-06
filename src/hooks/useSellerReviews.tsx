@@ -24,7 +24,8 @@ const getDeviceId = (): string => {
   return deviceId;
 };
 
-export const useSellerReviews = (sellerId?: string) => {
+export const useSellerReviews = (sellerId?: string, options?: { enabled?: boolean }) => {
+  const enabled = options?.enabled !== false;
   const { user } = useAuth();
   const [reviews, setReviews] = useState<SellerReview[]>([]);
   const [averageRating, setAverageRating] = useState(0);
