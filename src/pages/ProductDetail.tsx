@@ -110,8 +110,9 @@ const ProductDetail = () => {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [ratingModalOpen, setRatingModalOpen] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [reviewsOpen, setReviewsOpen] = useState(false);
   const sellerId = product?.seller?.id || product?.seller_id;
-  const { averageRating, totalReviews, hasReviewed, submitReview } = useSellerReviews(sellerId);
+  const { averageRating, totalReviews, hasReviewed, submitReview } = useSellerReviews(sellerId, { enabled: reviewsOpen });
   const cart = useCart();
   const { requireAuth, promptOpen, setPromptOpen, isAuthenticated } = useRequireAuth();
 
