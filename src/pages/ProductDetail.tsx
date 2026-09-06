@@ -675,7 +675,17 @@ const ProductDetail = () => {
                       {product.shop.trading_center}
                     </p>
                   )}
-                  <SellerRatingDisplay averageRating={averageRating} totalReviews={totalReviews} compact />
+                  {reviewsOpen ? (
+                    <SellerRatingDisplay averageRating={averageRating} totalReviews={totalReviews} compact />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setReviewsOpen(true)}
+                      className="text-xs text-primary font-medium underline-offset-2 hover:underline"
+                    >
+                      Show seller reviews
+                    </button>
+                  )}
                 </div>
                 {product.shop?.id && (
                   <FollowButton targetType="shop" targetId={product.shop.id} size="sm" />
