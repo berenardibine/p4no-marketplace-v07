@@ -77,8 +77,9 @@ export const useSellerReviews = (sellerId?: string, options?: { enabled?: boolea
   }, [sellerId, user?.id]);
 
   useEffect(() => {
+    if (!enabled) return;
     fetchReviews();
-  }, [fetchReviews]);
+  }, [fetchReviews, enabled]);
 
   const submitReview = async (rating: number, comment?: string) => {
     if (!sellerId) throw new Error('No seller ID');
