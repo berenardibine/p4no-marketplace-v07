@@ -281,7 +281,7 @@ export function subscribeFeatureFlags(fn: () => void): () => void {
 /** Timestamp of the last successful flag read, mirrored to localStorage. */
 const TS_KEY = `${LS_KEY}:ts`;
 /** Controlled cache window: admin changes still propagate within 10 minutes. */
-const FLAGS_TTL_MS = 10 * 60 * 1000;
+const FLAGS_TTL_MS = 30 * 60 * 1000;
 
 function flagsFresh(): boolean {
   if (typeof window === 'undefined') return false;
