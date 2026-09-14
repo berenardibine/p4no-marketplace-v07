@@ -23,13 +23,13 @@ export interface ActiveAd {
 
 const COLUMNS =
   'id,title,description,type,image_url,link,bg_color,text_color,font_size,target_audience,priority';
-const TTL = 10 * 60_000;
+const TTL = 30 * 60_000;
 
 export function getActiveAds(): Promise<ActiveAd[]> {
-  // Bucket the "now" filter to 10-minute slots so the cache key is stable.
-  const bucket = Math.floor(Date.now() / TTL);
+  // Stable key so the persisted copy survives reloads (bucketed keys forced a
+  // fresh PostgREST read every window even when a valid answer was on disk).
   return cachedQuery<ActiveAd[]>(
-    `ads:active:${bucket}`,
+    'ads:active:v1',
     async () => {
       const now = new Date().toISOString();
       const { data, error } = await supabase

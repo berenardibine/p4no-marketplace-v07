@@ -215,7 +215,7 @@ export const useFeaturedProducts = (userCountry?: string | null) => {
   const fetchFeatured = async () => {
     setLoading(true);
     try {
-      // Global list — one shared fetch per 5 minutes for all visitors.
+      // Global list — one shared fetch per 30 minutes for all visitors.
       const featured = await cachedQuery<any[]>('featured:active:v1', async () => {
         const { data } = await supabase
           .from('featured_products')
@@ -225,7 +225,7 @@ export const useFeaturedProducts = (userCountry?: string | null) => {
           .order('start_at', { ascending: false })
           .limit(12);
         return data ?? [];
-      }, { ttlMs: 5 * 60_000 });
+      }, { ttlMs: 30 * 60_000 });
 
       if (featured) {
         let products = featured

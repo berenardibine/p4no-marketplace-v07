@@ -4,8 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { cachedQuery, invalidateQuery } from '@/lib/queryCache';
 
 // The active-boost list is identical for every visitor, so it is fetched once
-// per 5 minutes and shared instead of once per page view.
-const BOOST_TTL = 5 * 60_000;
+// per 30 minutes and shared instead of once per page view.
+const BOOST_TTL = 30 * 60_000;
 const BOOST_KEY = 'boosts:active:v1';
 
 interface BoostedProduct {
