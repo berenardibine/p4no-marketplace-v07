@@ -1,26 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { useGeo } from '@/context/GeoContext';
 
-const SESSION_KEY = 'smartmarket_session_id';
 const PREF_KEY = 'smartmarket_view_pref';
-const SESSION_SYNCED_KEY = 'smartmarket_session_synced';
-
-const getSessionId = (): string => {
-  let sessionId = localStorage.getItem(SESSION_KEY);
-  if (!sessionId) {
-    sessionId = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(SESSION_KEY, sessionId);
-  }
-  return sessionId;
-};
 
 export type ViewPreference = 'global' | 'country_only';
 
 export const useViewPreference = () => {
   const { user, profile } = useAuth();
-  const { country, ip } = useGeo();
   const [preference, setPreference] = useState<ViewPreference>(() => {
     // Synchronous init from localStorage for instant render
     const cached = localStorage.getItem(PREF_KEY);
@@ -40,64 +27,15 @@ export const useViewPreference = () => {
     setLoaded(true);
   }, [user, profile]);
 
-  // Ensure visitor_preferences session exists in DB (fire-and-forget)
-  useEffect(() => {
-    if (!country) return;
-
-    const sessionId = getSessionId();
-    const maskedIp = ip ? ip.substring(0, 6) + '***' : null;
-
-    // The visitor row only needs to be resolved once per browser. After that
-    // a local marker short-circuits the read, so repeat visits cost zero DB.
-    if (localStorage.getItem(SESSION_SYNCED_KEY) === '1') return;
-
-    const ensureSession = async () => {
-      try {
-        // Check if exists
-        const { data } = await (supabase as any)
-          .from('visitor_preferences')
-          .select('id, filter_preference')
-          .eq('session_id', sessionId)
-          .maybeSingle();
-
-        if (!data) {
-          await (supabase as any).from('visitor_preferences').insert({
-            session_id: sessionId,
-            ip_address: maskedIp,
-            detected_country: country,
-            filter_preference: preference,
-          });
-        } else if (!localStorage.getItem(PREF_KEY) && data.filter_preference) {
-          // Returning visitor — restore preference from DB
-          setPreference(data.filter_preference);
-          localStorage.setItem(PREF_KEY, data.filter_preference);
-        }
-        localStorage.setItem(SESSION_SYNCED_KEY, '1');
-      } catch {
-        // Non-critical
-      }
-    };
-
-    ensureSession();
-  }, [country, ip]);
+  // NOTE: public visits no longer create or read a `visitor_preferences` row.
+  // The preference lives in localStorage for anonymous visitors and on the
+  // profile for signed-in users, so a public visit performs zero DB writes.
 
   const updatePreference = useCallback(async (newPref: ViewPreference) => {
     setPreference(newPref);
     localStorage.setItem(PREF_KEY, newPref);
 
-    const sessionId = getSessionId();
-
-    // Update visitor_preferences in DB
-    try {
-      await (supabase as any)
-        .from('visitor_preferences')
-        .update({ filter_preference: newPref })
-        .eq('session_id', sessionId);
-    } catch {
-      // Non-critical
-    }
-
-    // If logged in, update profile
+    // Only signed-in users persist the choice (on their own profile row).
     if (user) {
       try {
         await supabase
