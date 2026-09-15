@@ -519,6 +519,17 @@ function genReels(ctx: RunContext) {
   });
 }
 
+/** Listing projection for article lists — drops the full `content` body. */
+const articleCard = (a: any) => ({
+  id: a.id, slug: a.slug, title: a.title, excerpt: a.excerpt,
+  thumbnail_url: a.thumbnail_url, category_id: a.category_id,
+  author_id: a.author_id, published_at: a.published_at,
+  views: a.views, reading_time_minutes: a.reading_time_minutes,
+  is_featured: a.is_featured ?? null, status: a.status,
+});
+
+const ARTICLE_LIST_LIMIT = 48;
+
 function genArticles(ctx: RunContext) {
   return ctx.task("articles", async () => {
     const [latest, trending] = await Promise.all([
@@ -526,7 +537,7 @@ function genArticles(ctx: RunContext) {
       articlesBy(ctx, "views"),
     ]);
     return [
-      ctx.stage("articles/latest.json", latest),
+      ctx.stage("articles/latest.json", latest.slice(0, ARTICLE_LIST_LIMIT).map(articleCard)),
       ctx.stage("articles/trending.json", trending),
     ];
   });
