@@ -376,13 +376,35 @@ const card = (p: any) => ({
   views: p.views, created_at: p.created_at,
 });
 
+/**
+ * Listing projection: only the fields the listing UI (ProductCard, home
+ * sections, category grid) actually reads. Drops long `description`,
+ * `updated_at` and extra gallery images — those live in the detail files.
+ */
+const listCard = (p: any) => ({
+  id: p.id, slug: p.slug, title: p.title, price: p.price,
+  currency_symbol: p.currency_symbol, category: p.category,
+  images: Array.isArray(p.images) ? p.images.slice(0, 2) : [],
+  video_url: p.video_url ?? null, video_thumbnail: p.video_thumbnail ?? null,
+  views: p.views, created_at: p.created_at,
+  seller_id: p.seller_id, shop_id: p.shop_id,
+  quantity: p.quantity, minimum_quantity: p.minimum_quantity,
+  unlimited_quantity: p.unlimited_quantity,
+  contact_call: p.contact_call, contact_whatsapp: p.contact_whatsapp,
+  admin_posted: p.admin_posted, admin_shop_name: p.admin_shop_name,
+  seller: p.seller ?? null, shop: p.shop ?? null,
+});
+
+/** Rows kept in the public listing feeds (UI shows at most ~24 per section). */
+const LIST_LIMIT = 60;
+
 function genProductLists(ctx: RunContext) {
   return ctx.task("product-lists", async () => {
     const [all, latest, featured, popular, trending] = await Promise.all([
       products(ctx, "created", 1000),
-      products(ctx, "created", 100),
+      products(ctx, "created", LIST_LIMIT),
       products(ctx, "created", 100, true),
-      products(ctx, "views", 100),
+      products(ctx, "views", LIST_LIMIT),
       products(ctx, "views", 100),
     ]);
     const searchIndex = latest.concat(featured, popular, trending).reduce((acc: any[], p: any) => {
@@ -395,9 +417,9 @@ function genProductLists(ctx: RunContext) {
     }, []);
     return [
       ctx.stage("products/all.json", all.map(card)),
-      ctx.stage("products/latest.json", latest),
+      ctx.stage("products/latest.json", latest.map(listCard)),
       ctx.stage("products/featured.json", featured),
-      ctx.stage("products/popular.json", popular),
+      ctx.stage("products/popular.json", popular.map(listCard)),
       ctx.stage("products/trending.json", trending),
       ctx.stage("products/search-index.json", searchIndex),
     ];
