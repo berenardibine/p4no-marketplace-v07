@@ -332,7 +332,7 @@ const ShopPage = () => {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {products.map((product) => (
+              {sortedProducts.map((product) => (
                 <FloatingProductCard
                   key={product.id}
                   id={product.id}
