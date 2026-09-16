@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import BottomNav from '@/components/layout/BottomNav';
 import { getContent } from '@/lib/cdnGuard';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -161,7 +160,7 @@ const AvailableShopsPage = () => {
         )}
       </div>
 
-      <BottomNav />
+
     </div>
   );
 };

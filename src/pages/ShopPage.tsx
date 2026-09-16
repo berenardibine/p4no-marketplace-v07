@@ -18,7 +18,6 @@ import {
 import BottomNav from '@/components/layout/BottomNav';
 import FollowButton from '@/components/social/FollowButton';
 import { useFollow } from '@/hooks/useFollow';
-import { logActivity } from '@/lib/activityEvents';
 
 interface Shop {
   id: string;
