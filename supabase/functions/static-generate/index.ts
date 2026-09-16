@@ -566,14 +566,44 @@ function genCategories(ctx: RunContext) {
   });
 }
 
+/** Lightweight card for the public "Available Shops" listing. */
+const shopCard = (s: any, productCount: number) => ({
+  id: s.id, slug: s.slug ?? null, name: s.name,
+  description: typeof s.description === "string" ? s.description.slice(0, 160) : null,
+  logo_url: s.logo_url ?? null, trading_center: s.trading_center ?? null,
+  is_active: s.is_active ?? true, product_count: productCount,
+  created_at: s.created_at ?? null,
+});
+
+/** Products belonging to a shop: matched by shop_id, or by owner when unset. */
+function shopProducts(shop: any, all: any[]): any[] {
+  return all.filter((p: any) =>
+    (p.shop_id && p.shop_id === shop.id) ||
+    (!p.shop_id && p.seller_id && p.seller_id === shop.seller_id)
+  );
+}
+
 function genShops(ctx: RunContext) {
   return ctx.task("shops", async () => {
-    const rows = await ctx.query("shops:all", async () => {
-      const { data } = await admin.from("shops").select("*")
-        .order("created_at", { ascending: false }).limit(500);
-      return data ?? [];
-    });
-    return [ctx.stage("shops/all.json", rows)];
+    const [rows, allProducts] = await Promise.all([
+      ctx.query("shops:all", async () => {
+        const { data } = await admin.from("shops").select("*")
+          .order("created_at", { ascending: false }).limit(500);
+        return data ?? [];
+      }),
+      products(ctx, "created", 1000),
+    ]);
+
+    const out = [ctx.stage("shops/all.json", rows)];
+    const cards: any[] = [];
+    for (const s of rows as any[]) {
+      const mine = shopProducts(s, allProducts);
+      if (s.is_active !== false) cards.push(shopCard(s, mine.length));
+      const key = s.slug ?? s.id;
+      out.push(ctx.stage(`shops/${key}/products.json`, mine.slice(0, LIST_LIMIT).map(listCard)));
+    }
+    out.push(ctx.stage("shops/active.json", cards));
+    return out;
   });
 }
 
