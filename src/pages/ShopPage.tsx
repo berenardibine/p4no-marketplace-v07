@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { getContent } from '@/lib/cdnGuard';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 import FloatingProductCard from '@/components/home/FloatingProductCard';
 import ProductJsonLd from '@/components/seo/ProductJsonLd';
 import { Skeleton } from '@/components/ui/skeleton';
