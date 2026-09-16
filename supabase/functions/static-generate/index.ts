@@ -774,6 +774,7 @@ async function runJobs(ctx: RunContext, jobs: Job[]): Promise<void> {
       case "product":
         await genProductLists(ctx); await genFeeds(ctx);
         await genSearchIndex(ctx); await genHomepage(ctx);
+        await genShops(ctx); // keep per-shop product listings + counts current
         if (!isDelete && key) await genProductDetail(ctx, key);
         if (category) await genCategoryBundle(ctx, category);
         break;
