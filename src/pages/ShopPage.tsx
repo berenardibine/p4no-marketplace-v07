@@ -21,6 +21,7 @@ import { useFollow } from '@/hooks/useFollow';
 
 interface Shop {
   id: string;
+  slug?: string | null;
   name: string;
   description: string | null;
   logo_url: string | null;
@@ -72,7 +73,7 @@ const ShopPage = () => {
     try {
       const { data } = await supabase
         .from('shops')
-        .select('id, name, description, logo_url, trading_center, contact_phone, whatsapp, seller_id')
+        .select('id, slug, name, description, logo_url, trading_center, contact_phone, whatsapp, seller_id')
         .eq('id', shopId)
         .single();
       setShop(data);
