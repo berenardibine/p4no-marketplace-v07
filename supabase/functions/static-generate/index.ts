@@ -681,7 +681,15 @@ function genShopDetail(ctx: RunContext, slugOrId: string) {
       return data;
     });
     if (!data) return [];
-    return [ctx.stage(`shops/${(data as any).slug ?? (data as any).id}.json`, data)];
+    const shopKey = (data as any).slug ?? (data as any).id;
+    const all = await products(ctx, "created", 1000);
+    return [
+      ctx.stage(`shops/${shopKey}.json`, data),
+      ctx.stage(
+        `shops/${shopKey}/products.json`,
+        shopProducts(data, all).slice(0, LIST_LIMIT).map(listCard),
+      ),
+    ];
   });
 }
 
