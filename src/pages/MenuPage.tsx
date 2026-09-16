@@ -39,6 +39,7 @@ const MenuPage = () => {
   const publicMenuItems = [
     { icon: Briefcase, label: "P4NO Connect", href: "/connect", color: "bg-orange-500", badge: "NEW" },
     { icon: Newspaper, label: "P4NO Insights", href: "/insights", color: "bg-amber-600", badge: "NEW" },
+    { icon: Store, label: "Available Shops", href: "/shops", color: "bg-green-600" },
   ];
 
   // Authenticated-only menu items
