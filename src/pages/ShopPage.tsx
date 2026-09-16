@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { getContent } from '@/lib/cdnGuard';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 import FloatingProductCard from '@/components/home/FloatingProductCard';
 import ProductJsonLd from '@/components/seo/ProductJsonLd';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,10 +18,10 @@ import {
 import BottomNav from '@/components/layout/BottomNav';
 import FollowButton from '@/components/social/FollowButton';
 import { useFollow } from '@/hooks/useFollow';
-import { logActivity } from '@/lib/activityEvents';
 
 interface Shop {
   id: string;
+  slug?: string | null;
   name: string;
   description: string | null;
   logo_url: string | null;
@@ -71,7 +73,7 @@ const ShopPage = () => {
     try {
       const { data } = await supabase
         .from('shops')
-        .select('id, name, description, logo_url, trading_center, contact_phone, whatsapp, seller_id')
+        .select('id, slug, name, description, logo_url, trading_center, contact_phone, whatsapp, seller_id')
         .eq('id', shopId)
         .single();
       setShop(data);
@@ -98,62 +100,53 @@ const ShopPage = () => {
     }
   };
 
-  const fetchProducts = useCallback(async (pageNum: number, append = false) => {
-    if (!shop?.seller_id) return;
-
-    if (pageNum === 0) setLoading(true);
-    else setLoadingMore(true);
-
+  // Static-first shop products: one CDN read of `shops/<key>/products.json`.
+  // Falls back to a single sanctioned database read only if that file is not
+  // published yet. No paging requests, no polling.
+  const fetchProducts = useCallback(async () => {
+    if (!shop?.id) return;
+    setLoading(true);
     try {
-      const sortCfg = getSortConfig(sort);
-      const { data, count } = await supabase
-        .from('products')
-        .select('id, title, price, images, rental_unit, sponsored, is_negotiable, created_at, views', { count: 'exact' })
-        .eq('status', 'active')
-        .eq('seller_id', shop.seller_id)
-        .range(pageNum * LIMIT, (pageNum + 1) * LIMIT - 1)
-        .order(sortCfg.column, { ascending: sortCfg.ascending });
-
-      if (append) {
-        setProducts(prev => [...prev, ...(data || [])]);
-      } else {
-        setProducts(data || []);
+      let rows: any[] | null = await getContent<any[]>(`shops/${shop.id}/products`);
+      if (!rows && (shop as any).slug) {
+        rows = await getContent<any[]>(`shops/${(shop as any).slug}/products`);
       }
-      setProductCount(count || 0);
-      setHasMore((count || 0) > (pageNum + 1) * LIMIT);
+
+      if (!Array.isArray(rows)) {
+        allowLastResortRead('products');
+        const { data } = await supabase
+          .from('products')
+          .select('id, title, price, images, rental_unit, sponsored, is_negotiable, created_at, views, shop_id, seller_id')
+          .eq('status', 'active')
+          .or(`shop_id.eq.${shop.id},seller_id.eq.${shop.seller_id}`)
+          .order('created_at', { ascending: false })
+          .limit(60);
+        rows = (data || []).filter((p: any) => p.shop_id ? p.shop_id === shop.id : p.seller_id === shop.seller_id);
+      }
+
+      setProducts(rows as Product[]);
+      setProductCount(rows.length);
+      setHasMore(false);
     } catch (error) {
       console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [shop?.seller_id, sort]);
+  }, [shop?.id, shop?.seller_id]);
 
   useEffect(() => { fetchShop(); }, [fetchShop]);
-  useEffect(() => { if (shopId) logActivity({ event_type: 'shop_view', entity_type: 'shop', entity_id: shopId }); }, [shopId]);
 
-  useEffect(() => {
-    if (shop?.seller_id) {
-      setPage(0);
-      fetchProducts(0);
-    }
-  }, [shop?.seller_id, fetchProducts]);
+  useEffect(() => { if (shop?.id) fetchProducts(); }, [shop?.id, fetchProducts]);
 
-  // Infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
-          const nextPage = page + 1;
-          setPage(nextPage);
-          fetchProducts(nextPage, true);
-        }
-      },
-      { threshold: 0.1 }
-    );
-    if (loaderRef.current) observer.observe(loaderRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, loading, page, fetchProducts]);
+  const sortedProducts = useMemo(() => {
+    const cfg = getSortConfig(sort);
+    return [...products].sort((a: any, b: any) => {
+      const av = cfg.column === 'created_at' ? new Date(a.created_at || 0).getTime() : (a[cfg.column] || 0);
+      const bv = cfg.column === 'created_at' ? new Date(b.created_at || 0).getTime() : (b[cfg.column] || 0);
+      return cfg.ascending ? av - bv : bv - av;
+    });
+  }, [products, sort]);
 
   const handleWhatsApp = () => {
     if (shop?.whatsapp) {
@@ -339,7 +332,7 @@ const ShopPage = () => {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {products.map((product) => (
+              {sortedProducts.map((product) => (
                 <FloatingProductCard
                   key={product.id}
                   id={product.id}

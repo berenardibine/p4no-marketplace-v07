@@ -64,6 +64,7 @@ import AdminRewardSettings from "./pages/admin/AdminRewardSettings";
 // Menu Pages
 import AccountPage from "./pages/AccountPage";
 import MyShopPage from "./pages/MyShopPage";
+import AvailableShopsPage from "./pages/AvailableShopsPage";
 import FavoritesPage from "./pages/FavoritesPage";
 import ChallengesPage from "./pages/ChallengesPage";
 import RewardsPage from "./pages/RewardsPage";
@@ -216,6 +217,7 @@ const App = () => {
                 <Route path="/products/:slugOrId/by/:shopSlug" element={<ProductDetail />} />
                 <Route path="/seller-dashboard" element={<ProtectedRoute><SellerDashboard /></ProtectedRoute>} />
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/shops" element={<AvailableShopsPage />} />
                 <Route path="/shop/:shopId" element={<ShopPage />} />
                 <Route path="/r/:code" element={<ReferralLanding />} />
                 <Route path="/referrals" element={<ProtectedRoute><ReferralDashboard /></ProtectedRoute>} />
