@@ -30,9 +30,11 @@ const AIGreeting = () => {
           <h2 className="text-white font-bold text-xl mb-1.5">
             {getGreeting()}, {displayName} 👋
           </h2>
+          <p className="text-white font-bold text-base leading-tight">
+            P4NO Hub
+          </p>
           <p className="text-white/90 text-sm leading-relaxed">
-            p4no is ready for you! 
-            Discover amazing products from local sellers.
+            Connect. Discover. Grow.
           </p>
           <div className="flex items-center gap-2 mt-3">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-sm">
