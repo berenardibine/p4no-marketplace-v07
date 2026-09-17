@@ -714,7 +714,7 @@ const ProductDetail = () => {
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <h4 className="font-semibold">
-                      {(product as any).admin_shop_name || 'P4no Marketplace'}
+                      {(product as any).admin_shop_name || 'P4NO Hub'}
                     </h4>
                     <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 gap-1 text-xs">
                       <ShieldCheck className="h-3 w-3" /> Official

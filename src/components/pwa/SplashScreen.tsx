@@ -53,10 +53,10 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
           className="text-3xl font-bold tracking-tight mb-2"
           style={{ color: 'white' }}
         >
-          P4no
+          P4NO Hub
         </h1>
         <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          connect with community easy digitally 
+          Connect. Discover. Grow.
         </p>
       </div>
 
