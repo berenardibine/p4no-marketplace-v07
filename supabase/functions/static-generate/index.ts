@@ -398,6 +398,9 @@ const listCard = (p: any) => ({
 /** Rows kept in the public listing feeds (UI shows at most ~24 per section). */
 const LIST_LIMIT = 60;
 
+/** Per-shop product listing cap (loaded only when a shop page is opened). */
+const SHOP_PRODUCTS_LIMIT = 200;
+
 function genProductLists(ctx: RunContext) {
   return ctx.task("product-lists", async () => {
     const [all, latest, featured, popular, trending] = await Promise.all([
@@ -600,7 +603,7 @@ function genShops(ctx: RunContext) {
       const mine = shopProducts(s, allProducts);
       if (s.is_active !== false) cards.push(shopCard(s, mine.length));
       const key = s.slug ?? s.id;
-      out.push(ctx.stage(`shops/${key}/products.json`, mine.slice(0, LIST_LIMIT).map(listCard)));
+      out.push(ctx.stage(`shops/${key}/products.json`, mine.slice(0, SHOP_PRODUCTS_LIMIT).map(listCard)));
     }
     out.push(ctx.stage("shops/active.json", cards));
     return out;
@@ -687,7 +690,7 @@ function genShopDetail(ctx: RunContext, slugOrId: string) {
       ctx.stage(`shops/${shopKey}.json`, data),
       ctx.stage(
         `shops/${shopKey}/products.json`,
-        shopProducts(data, all).slice(0, LIST_LIMIT).map(listCard),
+        shopProducts(data, all).slice(0, SHOP_PRODUCTS_LIMIT).map(listCard),
       ),
     ];
   });
