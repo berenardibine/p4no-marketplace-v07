@@ -64,7 +64,7 @@ Return ONLY a tool call.`;
               type: "object",
               properties: {
                 seo_title: { type: "string" },
-                seo_description: { type: "string", minLength: 800 },
+                seo_description: { type: "string" },
                 slug: { type: "string" },
               },
               required: ["seo_title", "seo_description", "slug"],
