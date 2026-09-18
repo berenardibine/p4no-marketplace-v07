@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
+import { fetchIpGeo } from '@/lib/ipGeo';
 
 interface GPSCoords {
   lat: number;
