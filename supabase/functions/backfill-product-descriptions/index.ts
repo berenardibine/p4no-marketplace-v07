@@ -98,7 +98,7 @@ serve(async (req) => {
     if (error) throw error;
 
     const targets = (products || []).filter(p =>
-      !p.description || p.description.trim().length < 800
+      !p.description || p.description.trim().length < 20
     ).slice(0, limit);
 
     let updated = 0;
