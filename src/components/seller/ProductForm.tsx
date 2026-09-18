@@ -114,11 +114,11 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       if (data?.error) throw new Error(data.error);
       setStructured(data.description_structured || null);
       if (data?.tags?.length) setTagsInput(data.tags.join(', '));
-      // Backfill plain description from structured content so 800-char rule is met
+      // Short description stays short (max ~50 words); rich content lives in the structured fields
       const ds = data.description_structured;
-      if (ds) {
-        const flat = [ds.overview, ...(ds.key_benefits || []), ...(ds.features || []), ds.ideal_for, ds.why_choose, ds.final_thoughts].filter(Boolean).join('\n\n');
-        setFormData(prev => ({ ...prev, description: flat }));
+      if (ds?.overview) {
+        const words = String(ds.overview).trim().split(/\s+/);
+        setFormData(prev => ({ ...prev, description: words.slice(0, 50).join(' ') }));
       }
       toast({ title: "✨ Enhanced with AI", description: "Structured content, tags & FAQs generated." });
     } catch (err: any) {

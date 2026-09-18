@@ -13,6 +13,8 @@ export interface IpGeo {
   currency: string | null;
   latitude: number | null;
   longitude: number | null;
+  city: string | null;
+  region: string | null;
 }
 
 const TTL = 24 * 60 * 60 * 1000;
@@ -33,6 +35,8 @@ export function fetchIpGeo(): Promise<IpGeo> {
         currency: d.currency ?? null,
         latitude: d.latitude ?? null,
         longitude: d.longitude ?? null,
+        city: d.city ?? null,
+        region: d.region ?? null,
       };
     },
     { ttlMs: TTL },

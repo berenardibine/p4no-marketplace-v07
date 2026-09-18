@@ -14,8 +14,7 @@ const slugify = (s: string) =>
     .slice(0, 60);
 
 async function generateOne(title: string, category: string | null, apiKey: string) {
-  const prompt = `You are an elite e-commerce SEO copywriter for the marketplace p4no.
-Write the MOST POWERFUL, conversion-focused product listing possible.
+  const prompt = `You are an elite e-commerce copywriter for the marketplace p4no.
 
 Product: "${title}"
 Category: "${category || 'General'}"
@@ -23,15 +22,10 @@ Variation seed: ${Math.random().toString(36).slice(2, 8)}
 
 Requirements:
 - seo_title: max 70 chars, magnetic, keyword-rich, includes a benefit or differentiator
-- seo_description: AT LEAST 1000 characters, plain text with short paragraphs separated by blank lines (no markdown, no emojis). Structure:
-    1) Hook intro (1-2 sentences) that names the product and its main promise
-    2) Key benefits (4-6 sentences focused on outcomes, not just specs)
-    3) Who it's for / best use cases
-    4) Quality, durability, or trust signals
-    5) Why buy on p4no (fast contact with seller, negotiable, local availability)
-    6) Strong call-to-action closing
-   Naturally weave in long-tail keywords related to the product and category.
-   Write 100% original copy. Never copy from any external website.
+- seo_description: a short description of MAXIMUM 50 WORDS. It may be shorter when that reads
+  better - never pad it to reach the limit. Plain text, 1-3 short sentences, no markdown, no
+  emojis, no bullets. Clear, natural, useful and easy to read: what it is and why it is worth
+  buying. 100% original copy, never copied from any external website.
 - slug: short URL-friendly slug, lowercase, hyphen-separated, max 60 chars.`;
 
   const callModel = async (model: string) => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -104,7 +98,7 @@ serve(async (req) => {
     if (error) throw error;
 
     const targets = (products || []).filter(p =>
-      !p.description || p.description.trim().length < 800
+      !p.description || p.description.trim().length < 20
     ).slice(0, limit);
 
     let updated = 0;

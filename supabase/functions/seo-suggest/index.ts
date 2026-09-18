@@ -34,13 +34,11 @@ Category: "${category || 'General'}"${seed}
 
 Produce:
 1. seo_title: SEO-optimized product title (max 70 chars, attractive, keyword-rich, no quotes)
-2. seo_description: a UNIQUE, ORIGINAL marketing description that is AT LEAST 850 characters long.
-   Structure (use plain text with short paragraphs separated by blank lines, no markdown headings):
-   - Short engaging intro (1-2 sentences)
-   - Key benefits (3-5 sentences focused on outcomes, not just features)
-   - Use cases / who it's for (2-3 sentences)
-   - Closing persuasive call-to-action sentence
-   Tone: simple, persuasive, trustworthy. Naturally include relevant keywords. Do NOT copy from any website. Do NOT use bullet symbols.
+2. seo_description: a UNIQUE, ORIGINAL short description of MAXIMUM 50 WORDS.
+   It can be shorter than 50 words when that reads better - never pad it to reach the limit.
+   Plain text, 1-3 short sentences, no markdown, no bullet symbols, no headings.
+   Must be clear, natural, useful and easy to read: say what it is and why it is worth buying.
+   Tone: simple, persuasive, trustworthy. Do NOT copy from any website.
 3. slug: short URL-friendly slug, lowercase, hyphen-separated, max 60 chars.
 
 Return ONLY a tool call.`;
@@ -66,7 +64,7 @@ Return ONLY a tool call.`;
               type: "object",
               properties: {
                 seo_title: { type: "string" },
-                seo_description: { type: "string", minLength: 800 },
+                seo_description: { type: "string" },
                 slug: { type: "string" },
               },
               required: ["seo_title", "seo_description", "slug"],
@@ -115,11 +113,9 @@ Return ONLY a tool call.`;
       });
     }
 
-    // Pad if AI undershoots the 800 char minimum
-    if (result.seo_description.length < 800) {
-      const filler = ` This product is carefully selected to meet the everyday needs of buyers across the region. With reliable quality, fair pricing, and dependable performance, it offers great value for your investment. Whether for personal use, your business, or as a thoughtful gift, you can shop with confidence on p4no — the trusted marketplace connecting buyers and sellers across communities.`;
-      while (result.seo_description.length < 850) result.seo_description += filler;
-    }
+    // Hard cap at 50 words (never pad)
+    const words = result.seo_description.trim().split(/\s+/);
+    if (words.length > 50) result.seo_description = words.slice(0, 50).join(" ").replace(/[,;:]$/, "") + ".";
 
     if (!result.slug) result.slug = slugify(result.seo_title);
 

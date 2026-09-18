@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
+import { fetchIpGeo } from '@/lib/ipGeo';
 
 interface GPSCoords {
   lat: number;
@@ -159,11 +160,8 @@ export const useGPSLocation = () => {
 
   const fetchIPLocation = async () => {
     try {
-      const response = await fetch('https://ipapi.co/json/', {
-        headers: { Accept: 'application/json' },
-      });
-      if (!response.ok) throw new Error('IP API failed');
-      const data = await response.json();
+      // Shared single-flight + 24h cached lookup (avoids duplicate ipapi.co calls)
+      const data = await fetchIpGeo();
       return {
         latitude: data.latitude,
         longitude: data.longitude,
