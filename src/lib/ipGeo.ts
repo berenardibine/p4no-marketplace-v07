@@ -35,6 +35,8 @@ export function fetchIpGeo(): Promise<IpGeo> {
         currency: d.currency ?? null,
         latitude: d.latitude ?? null,
         longitude: d.longitude ?? null,
+        city: d.city ?? null,
+        region: d.region ?? null,
       };
     },
     { ttlMs: TTL },
