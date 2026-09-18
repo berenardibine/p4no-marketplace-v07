@@ -13,6 +13,8 @@ export interface IpGeo {
   currency: string | null;
   latitude: number | null;
   longitude: number | null;
+  city: string | null;
+  region: string | null;
 }
 
 const TTL = 24 * 60 * 60 * 1000;
