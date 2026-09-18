@@ -113,11 +113,9 @@ Return ONLY a tool call.`;
       });
     }
 
-    // Pad if AI undershoots the 800 char minimum
-    if (result.seo_description.length < 800) {
-      const filler = ` This product is carefully selected to meet the everyday needs of buyers across the region. With reliable quality, fair pricing, and dependable performance, it offers great value for your investment. Whether for personal use, your business, or as a thoughtful gift, you can shop with confidence on p4no — the trusted marketplace connecting buyers and sellers across communities.`;
-      while (result.seo_description.length < 850) result.seo_description += filler;
-    }
+    // Hard cap at 50 words (never pad)
+    const words = result.seo_description.trim().split(/\s+/);
+    if (words.length > 50) result.seo_description = words.slice(0, 50).join(" ").replace(/[,;:]$/, "") + ".";
 
     if (!result.slug) result.slug = slugify(result.seo_title);
 
