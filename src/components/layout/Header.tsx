@@ -26,7 +26,10 @@ const Header = ({ onSearchClick, notificationCount = 0 }: HeaderProps) => {
               className="w-7 h-7 object-contain"
             />
           </div>
-          <span className="font-extrabold text-white text-xl tracking-tight">P4no</span>
+          <div className="leading-tight">
+            <h1 className="font-extrabold text-white text-base">P4NO Hub</h1>
+            <p className="text-white/80 text-[9px]">Connect. Discover. Grow.</p>
+          </div>
         </div>
 
         {/* Actions */}

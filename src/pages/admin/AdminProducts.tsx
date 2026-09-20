@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCategories } from "@/hooks/useCategories";
 import { useAdmin } from "@/hooks/useAdmin";
 import { cn } from "@/lib/utils";
+import { allowLastResortRead } from "@/lib/apiFirewall";
 
 const AdminProducts = () => {
   const navigate = useNavigate();
@@ -33,6 +34,8 @@ const AdminProducts = () => {
 
   const fetchProducts = async () => {
     setLoading(true);
+    // Admin-authorized read: strict public delivery mode must not replace it with `[]`.
+    allowLastResortRead('products');
     const { data } = await supabase
       .from('products')
       .select(`
