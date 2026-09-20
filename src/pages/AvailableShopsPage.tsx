@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Store, MapPin, Package, Search } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Store, MapPin, Package, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -78,7 +78,7 @@ const AvailableShopsPage = () => {
         </div>
       </div>
 
-      <div className="px-4 pt-4 space-y-4">
+      <div className="mx-auto max-w-6xl px-4 pt-4 space-y-5">
         <div className="relative">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -90,9 +90,9 @@ const AvailableShopsPage = () => {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-28 rounded-2xl" />
+              <Skeleton key={i} className="aspect-[4/3] rounded-xl" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -102,59 +102,73 @@ const AvailableShopsPage = () => {
             <p className="text-sm text-muted-foreground">Try a different search.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {filtered.map((shop) => (
-              <div
+              <article
                 key={shop.id}
-                className="bg-card border border-border/50 rounded-2xl p-4 shadow-sm flex gap-3"
+                className="group overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-1 hover:shadow-elevated motion-reduce:transform-none motion-reduce:transition-none"
               >
-                <div className="w-16 h-16 rounded-xl bg-muted overflow-hidden flex items-center justify-center shrink-0">
+                <div className="relative aspect-[16/9] overflow-hidden bg-muted">
                   {shop.logo_url ? (
                     <img
                       src={shop.logo_url}
-                      alt={`${shop.name} logo`}
-                      className="w-full h-full object-cover"
+                      alt={`${shop.name} cover`}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:transition-none"
                       loading="lazy"
                     />
                   ) : (
-                    <Store className="h-7 w-7 text-primary" />
+                    <div className="flex h-full w-full items-center justify-center bg-accent">
+                      <Store className="h-12 w-12 text-primary/60" />
+                    </div>
                   )}
+                  <Badge className="absolute right-3 top-3 border-primary/20 bg-background/90 text-primary shadow-xs backdrop-blur-sm hover:bg-background/90">
+                    Active
+                  </Badge>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold truncate">{shop.name}</h3>
-                    <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
-                      Active
-                    </Badge>
+
+                <div className="relative flex min-h-52 flex-col px-4 pb-4 pt-10">
+                  <div className="absolute -top-8 left-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-4 border-card bg-muted shadow-soft">
+                    {shop.logo_url ? (
+                      <img
+                        src={shop.logo_url}
+                        alt={`${shop.name} logo`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Store className="h-7 w-7 text-primary" />
+                    )}
                   </div>
+
+                  <h3 className="truncate text-lg font-bold text-card-foreground">{shop.name}</h3>
                   {shop.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                    <p className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-muted-foreground">
                       {shop.description}
                     </p>
                   )}
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                  <div className="mt-3 flex min-h-5 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     {shop.trading_center && (
                       <span className="flex items-center gap-1 truncate">
-                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
                         {shop.trading_center}
                       </span>
                     )}
                     {typeof shop.product_count === 'number' && (
                       <span className="flex items-center gap-1">
-                        <Package className="h-3.5 w-3.5" />
-                        {shop.product_count}
+                        <Package className="h-3.5 w-3.5 text-primary" />
+                        {shop.product_count} {shop.product_count === 1 ? 'product' : 'products'}
                       </span>
                     )}
                   </div>
                   <Button
-                    size="sm"
-                    className="mt-3 rounded-xl h-8 text-xs"
+                    className="mt-auto w-full justify-between rounded-lg"
                     onClick={() => navigate(`/shop/${shop.id}`)}
                   >
                     View Shop
+                    <ArrowUpRight className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
