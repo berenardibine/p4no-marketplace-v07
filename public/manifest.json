@@ -1,7 +1,7 @@
 {
-  "name": "p4no",
-  "short_name": "p4no",
-  "description": "Step into p4no, a next-generation marketplace built for smart buyers and sellers. Discover unique products, better deals, and a faster way to shop online.",
+  "name": "P4NO Hub",
+  "short_name": "P4NO Hub",
+  "description": "Find products, businesses and services, connect with trusted providers, and discover what you need near you with P4NO.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

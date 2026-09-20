@@ -28,9 +28,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       injectRegister: false,
       manifest: {
-        name: 'p4no',
-        short_name: 'p4no',
-        description: 'Built for the Next Generation of Trade. Discover smarter shopping across 196+ countries.',
+        name: 'P4NO Hub',
+        short_name: 'P4NO Hub',
+        description: 'Find products, businesses and services, connect with trusted providers, and discover what you need near you with P4NO.',
         theme_color: '#F97316',
         background_color: '#FFFFFF',
         display: 'standalone',
