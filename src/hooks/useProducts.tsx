@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { PRODUCT_CARD_WITH_RELATIONS } from '@/lib/queryFields';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 
 
 
@@ -269,6 +270,9 @@ export const useMyProducts = () => {
     
     try {
       setLoading(true);
+      // Owner-scoped read: sanction it so strict static mode doesn't answer `[]`
+      // (that made the seller dashboard show "No Products Yet" with products present).
+      allowLastResortRead('products');
       const { data } = await supabase
         .from('products')
         .select(`
