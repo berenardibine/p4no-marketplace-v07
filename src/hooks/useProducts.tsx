@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { PRODUCT_CARD_WITH_RELATIONS } from '@/lib/queryFields';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 
 
 
