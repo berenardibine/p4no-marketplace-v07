@@ -684,9 +684,11 @@ function genServiceDetail(ctx: RunContext, slugOrId: string) {
   return ctx.task(`service-detail:${slugOrId}`, async () => {
     const data = await ctx.query(`service:${slugOrId}`, async () => {
       const { data } = await admin.from("services")
-        .select(`*, provider:profiles!services_provider_id_fkey(id,full_name,profile_image)`)
+        .select("*")
         .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
-      return data;
+      if (!data) return null;
+      const [withSeller] = await attachServiceSellers([data]);
+      return withSeller;
     });
     if (!data) return [];
     return [ctx.stage(`service/${(data as any).slug ?? (data as any).id}.json`, data)];
