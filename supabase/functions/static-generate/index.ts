@@ -333,15 +333,34 @@ function categoriesAll(ctx: RunContext): Promise<any[]> {
   });
 }
 
+// Card-only fields for public service listings. `services` has no FK to
+// `profiles`, so provider data is attached with ONE extra query per event.
+const SERVICE_CARD_COLS =
+  "id,seller_id,title,slug,category,short_description,pricing_type,price," +
+  "currency_symbol,currency_code,location,country,images,video_url,video_thumbnail," +
+  "is_featured,views,created_at";
+
+async function attachServiceSellers(rows: any[]): Promise<any[]> {
+  if (!rows.length) return rows;
+  const ids = Array.from(new Set(rows.map((s: any) => s.seller_id).filter(Boolean)));
+  if (!ids.length) return rows;
+  const { data: sellers } = await admin
+    .from("profiles")
+    .select("id,full_name,profile_image,identity_verified,rating,rating_count,whatsapp_number,call_number")
+    .in("id", ids);
+  const map = new Map((sellers ?? []).map((s: any) => [s.id, s]));
+  return rows.map((s: any) => ({ ...s, seller: map.get(s.seller_id) ?? null }));
+}
+
 function servicesBy(ctx: RunContext, sort: "created" | "views"): Promise<any[]> {
   return ctx.query(`services:${sort}`, async () => {
-    const cols = `*, provider:profiles!services_provider_id_fkey(id,full_name,profile_image)`;
-    let q = admin.from("services").select(cols).eq("status", "active");
+    let q = admin.from("services").select(SERVICE_CARD_COLS).eq("status", "active");
     q = sort === "created"
       ? q.order("created_at", { ascending: false })
       : q.order("views", { ascending: false, nullsFirst: false });
-    const { data } = await q.limit(100);
-    return data ?? [];
+    const { data, error } = await q.limit(100);
+    if (error) throw error;
+    return await attachServiceSellers(data ?? []);
   });
 }
 
@@ -484,10 +503,21 @@ function genServices(ctx: RunContext) {
       servicesBy(ctx, "created"),
       servicesBy(ctx, "views"),
     ]);
+    const featured = latest.filter((s: any) => s.is_featured);
+    const byCategory = new Map<string, any[]>();
+    for (const s of latest) {
+      if (!s.category) continue;
+      const list = byCategory.get(s.category) ?? [];
+      list.push(s);
+      byCategory.set(s.category, list);
+    }
     return [
       ctx.stage("services/latest.json", latest),
-      ctx.stage("services/featured.json", latest),
+      ctx.stage("services/featured.json", featured.length ? featured : latest),
       ctx.stage("services/trending.json", trending),
+      ...Array.from(byCategory.entries()).map(([cat, rows]) =>
+        ctx.stage(`services/category/${cat}.json`, rows)
+      ),
     ];
   });
 }
@@ -654,9 +684,11 @@ function genServiceDetail(ctx: RunContext, slugOrId: string) {
   return ctx.task(`service-detail:${slugOrId}`, async () => {
     const data = await ctx.query(`service:${slugOrId}`, async () => {
       const { data } = await admin.from("services")
-        .select(`*, provider:profiles!services_provider_id_fkey(id,full_name,profile_image)`)
+        .select("*")
         .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
-      return data;
+      if (!data) return null;
+      const [withSeller] = await attachServiceSellers([data]);
+      return withSeller;
     });
     if (!data) return [];
     return [ctx.stage(`service/${(data as any).slug ?? (data as any).id}.json`, data)];
