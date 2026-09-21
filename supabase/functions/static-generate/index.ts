@@ -503,10 +503,21 @@ function genServices(ctx: RunContext) {
       servicesBy(ctx, "created"),
       servicesBy(ctx, "views"),
     ]);
+    const featured = latest.filter((s: any) => s.is_featured);
+    const byCategory = new Map<string, any[]>();
+    for (const s of latest) {
+      if (!s.category) continue;
+      const list = byCategory.get(s.category) ?? [];
+      list.push(s);
+      byCategory.set(s.category, list);
+    }
     return [
       ctx.stage("services/latest.json", latest),
-      ctx.stage("services/featured.json", latest),
+      ctx.stage("services/featured.json", featured.length ? featured : latest),
       ctx.stage("services/trending.json", trending),
+      ...Array.from(byCategory.entries()).map(([cat, rows]) =>
+        ctx.stage(`services/category/${cat}.json`, rows)
+      ),
     ];
   });
 }
