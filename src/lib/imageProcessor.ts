@@ -7,8 +7,8 @@
  * 4. SEO filename generation
  */
 
-const WATERMARK_TEXT = 'p4no';
-const WATERMARK_SLOGAN = 'Next Generation of Trade';
+const WATERMARK_TEXT = 'P4no hub';
+const WATERMARK_SLOGAN = 'find connect';
 const WATERMARK_OPACITY = 0.6;
 
 interface ProcessingOptions {
