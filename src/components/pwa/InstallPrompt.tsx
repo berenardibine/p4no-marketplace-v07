@@ -148,7 +148,7 @@ const InstallPrompt = () => {
           <img src="/favicon.ico" alt="p4no" className="w-10 h-10 object-contain" />
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm text-foreground">Install p4no</h3>
+          <h3 className="font-semibold text-sm text-foreground">Install P4no hub</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isIOS
               ? 'Tap the Share button below, then "Add to Home Screen"'
