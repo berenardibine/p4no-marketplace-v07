@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SITE_URL = "https://p4no-marketplace.vercel.app";
+const SITE_URL = "https://p4nohub.vercel.app";
 const PAGE_SIZE = 5000;
 
 const esc = (s: string | null | undefined): string =>
@@ -56,13 +56,8 @@ async function genStatic() {
     ["/connect/reels", "0.7", "daily"],
     ["/reels", "0.8", "daily"],
     ["/insights", "0.9", "daily"],
-    ["/agriculture", "0.7", "daily"],
-    ["/rent", "0.7", "daily"],
-    ["/assets", "0.7", "daily"],
     ["/help", "0.5", "monthly"],
-    ["/support", "0.5", "monthly"],
-    ["/premium", "0.6", "monthly"],
-    ["/challenges", "0.5", "weekly"],
+    ["/support", "0.5", "monthly"
     ["/rewards", "0.5", "weekly"],
   ] as const;
   let xml = urlsetOpen();
@@ -100,8 +95,7 @@ async function genPages(sb: any) {
     ["/rent", "daily", "0.7"],
     ["/assets", "daily", "0.7"],
     ["/help", "monthly", "0.5"],
-    ["/support", "monthly", "0.5"],
-    ["/premium", "monthly", "0.6"],
+    ["/support", "monthly", "0.5"]
     ["/challenges", "weekly", "0.5"],
     ["/rewards", "weekly", "0.5"],
     ["/about", "monthly", "0.6"],
@@ -109,7 +103,6 @@ async function genPages(sb: any) {
     ["/privacy-policy", "yearly", "0.3"],
     ["/terms", "yearly", "0.3"],
     ["/sellers", "weekly", "0.7"],
-    ["/opportunities", "weekly", "0.6"],
     ["/categories", "weekly", "0.7"],
     ["/local-business-directory", "weekly", "0.7"],
   ];
