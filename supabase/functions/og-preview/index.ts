@@ -6,11 +6,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SITE_URL = (Deno.env.get("OG_SITE_URL") || "https://p4no-marketplace.vercel.app").replace(/\/$/, "");
-const SITE_NAME = "p4no";
+const SITE_URL = (Deno.env.get("OG_SITE_URL") || "https://p4nohub.vercel.app").replace(/\/$/, "");
+const SITE_NAME = "P4no";
 const DEFAULT_IMAGE = `${SITE_URL}/og-image.png`;
 const DEFAULT_DESCRIPTION =
-  "Buy and sell products, equipment, agriculture goods and services on p4no marketplace.";
+  "Find products, businesses and services, connect with trusted providers, and discover what you need near you with P4NO.;
 
 function escapeHtml(str: string): string {
   return str
