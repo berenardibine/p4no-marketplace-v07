@@ -1,4 +1,6 @@
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
 import { ArrowLeft, Briefcase, TrendingUp, Sparkles, Search, Plus, Megaphone } from 'lucide-react';
 import { useServices } from '@/hooks/useServices';
 import { useServiceCategories } from '@/hooks/useServiceCategories';
@@ -13,7 +15,14 @@ const ConnectHome = () => {
   const { user, profile } = useAuth();
   const { services: featured, loading: l1 } = useServices({ featured: true, limit: 10 });
   const { services: trending, loading: l2 } = useServices({ trending: true, limit: 10 });
-  const { services: recent, loading: l3 } = useServices({ limit: 12 });
+  const { services: recent, loading: l3 } = useServices({});
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return recent.slice(0, 12);
+    return recent.filter(s => [s.title, s.short_description, s.category, s.location, s.seller?.full_name]
+      .some(v => (v || '').toLowerCase().includes(t)));
+  }, [recent, q]);
   const { categories } = useServiceCategories();
 
   const handleAddService = () => {
@@ -68,6 +77,11 @@ const ConnectHome = () => {
           </div>
         </button>
 
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Search services, providers, locations…" className="pl-9 rounded-xl" />
+        </div>
+
         {/* Categories */}
         <section className="space-y-3">
           <h2 className="font-bold text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Popular Categories</h2>
@@ -90,19 +104,19 @@ const ConnectHome = () => {
         <ServiceCarousel title="Trending Providers" icon="🔥" services={trending} loading={l2} />
 
         <section className="space-y-3">
-          <h2 className="font-bold text-base flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> Recently Added</h2>
+          <h2 className="font-bold text-base flex items-center gap-2"><TrendingUp className="h-4 w-4 text-primary" /> {q ? `Results (${shown.length})` : 'Recently Added'}</h2>
           {l3 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="aspect-video rounded-2xl" />)}
             </div>
-          ) : recent.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="text-center py-12 bg-card rounded-2xl border">
               <Briefcase className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No services yet. Be the first to publish!</p>
+              <p className="text-sm text-muted-foreground">{q ? 'No services match your search.' : 'No services yet. Be the first to publish!'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {recent.map(s => <ServiceCard key={s.id} service={s} />)}
+              {shown.map(s => <ServiceCard key={s.id} service={s} />)}
             </div>
           )}
         </section>
