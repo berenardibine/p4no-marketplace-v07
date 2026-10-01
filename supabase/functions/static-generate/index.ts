@@ -683,9 +683,10 @@ function genServiceDetail(ctx: RunContext, slugOrId: string) {
   if (!slugOrId) return Promise.resolve([]);
   return ctx.task(`service-detail:${slugOrId}`, async () => {
     const data = await ctx.query(`service:${slugOrId}`, async () => {
+      const isUuid = /^[0-9a-f-]{36}$/i.test(slugOrId);
       const { data } = await admin.from("services")
         .select("*")
-        .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`).maybeSingle();
+        .eq(isUuid ? "id" : "slug", slugOrId).maybeSingle();
       if (!data) return null;
       const [withSeller] = await attachServiceSellers([data]);
       return withSeller;
