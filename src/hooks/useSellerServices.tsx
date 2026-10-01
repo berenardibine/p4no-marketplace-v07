@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 
 export function useSellerServices() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export function useSellerServices() {
   const refetch = useCallback(async () => {
     if (!user) { setServices([]); setLoading(false); return; }
     setLoading(true);
+    allowLastResortRead('services');
     const { data } = await supabase
       .from('services')
       .select('*')

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Briefcase, Star, Pause, Play, Trash2, Eye, Search, Loader2, ShieldAlert, Edit2, Check, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdmin } from '@/hooks/useAdmin';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,7 @@ const AdminServices = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
+    allowLastResortRead('services', 2);
     let q = supabase
       .from('services')
       .select('*, seller:profiles!services_seller_id_fkey(id, full_name, profile_image, identity_verified)')
