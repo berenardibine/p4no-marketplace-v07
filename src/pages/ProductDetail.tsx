@@ -640,6 +640,8 @@ const ProductDetail = () => {
             </FeatureGate>
           </DeferUntilVisible>
 
+          <WhyP4NOHub />
+
           {/* Seller Info */}
           {!product.admin_posted ? (
             <div className="bg-gradient-to-r from-primary/5 to-secondary/5 rounded-2xl p-4">

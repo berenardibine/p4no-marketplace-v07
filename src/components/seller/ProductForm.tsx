@@ -115,6 +115,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setStructured(data.description_structured || null);
+      if (data.description_structured?.delivery_rules) setDeliveryRules(data.description_structured.delivery_rules);
       if (data?.tags?.length) setTagsInput(data.tags.join(', '));
       // Short description stays short (max ~50 words); rich content lives in the structured fields
       const ds = data.description_structured;
