@@ -2,8 +2,7 @@ import { useState, useMemo } from 'react';
 import { Wrench } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import SearchModal from '@/components/layout/SearchModal';
-import SellerFAB from '@/components/layout/SellerFAB';
-import AdminFAB from '@/components/layout/AdminFAB';
+import DashboardFABs from '@/components/layout/DashboardFABs';
 import FloatingProductCard from '@/components/home/FloatingProductCard';
 import HomeAds from '@/components/home/HomeAds';
 import GlobalLocationModal from '@/components/location/GlobalLocationModal';
@@ -131,8 +130,7 @@ const RentPage = () => {
         )}
       </main>
 
-      {isSeller && <SellerFAB />}
-      <AdminFAB />
+      <DashboardFABs showSeller={isSeller} />
       <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <GlobalLocationModal 
         isOpen={showLocationModal} 

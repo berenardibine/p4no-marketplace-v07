@@ -6,8 +6,7 @@ import {
 import Header from "@/components/layout/Header";
 import { useNotifications } from "@/hooks/useNotifications";
 import SearchModal from "@/components/layout/SearchModal";
-import SellerFAB from "@/components/layout/SellerFAB";
-import AdminFAB from "@/components/layout/AdminFAB";
+import DashboardFABs from "@/components/layout/DashboardFABs";
 import GlobalLocationModal from "@/components/location/GlobalLocationModal";
 import LocationPermissionBanner from "@/components/location/LocationPermissionBanner";
 import HomeAds from "@/components/home/HomeAds";
@@ -381,8 +380,7 @@ const Index = () => {
         </section>
       </main>
 
-      {isSeller && <SellerFAB />}
-      <AdminFAB />
+      <DashboardFABs showSeller={isSeller} />
       <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <GlobalLocationModal 
         isOpen={showLocationModal} 
