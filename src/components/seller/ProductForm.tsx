@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { DeliveryRulesEditor, type DeliveryRule } from "@/components/products/DeliveryInfo";
 import { useCategories } from "@/hooks/useCategories";
 import { useToast } from "@/hooks/use-toast";
 import { useProcessedUpload } from "@/hooks/useProcessedUpload";
@@ -41,6 +42,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
   const [aiDescLoading, setAiDescLoading] = useState(false);
   const [aiEnhanceLoading, setAiEnhanceLoading] = useState(false);
   const [structured, setStructured] = useState<any>((product as any)?.description_structured || null);
+  const [deliveryRules, setDeliveryRules] = useState<DeliveryRule[]>(((product as any)?.description_structured?.delivery_rules) || []);
   const [images, setImages] = useState<string[]>(product?.images || []);
   const [processingImages, setProcessingImages] = useState<Set<number>>(new Set());
   const [videoUrl, setVideoUrl] = useState(product?.video_url || '');
@@ -249,7 +251,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       const productData: any = {
         title: formData.title,
         description: formData.description,
-        description_structured: structured,
+        description_structured: (() => { const r = deliveryRules.filter(d => d.country.trim()); const base = { ...(structured || {}) }; delete base.delivery_rules; return r.length ? { ...base, delivery_rules: r } : (Object.keys(base).length ? base : null); })(),
         slug: product?.slug || slugify(formData.title),
         price: formData.price ? parseFloat(formData.price) : 0,
         quantity: parseInt(formData.quantity),
@@ -591,6 +593,8 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
             {wc > 50 && <span className="text-destructive">{wc - 50} too many</span>}
           </div>); })()}
         </div>
+
+        <DeliveryRulesEditor value={deliveryRules} onChange={setDeliveryRules} />
 
         {/* Tags */}
         <div className="space-y-2">

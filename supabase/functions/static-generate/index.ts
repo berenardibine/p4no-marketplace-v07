@@ -296,7 +296,7 @@ const PRODUCT_COLS = `
   id,slug,title,description,price,currency_symbol,images,video_url,video_thumbnail,
   category,status,views,created_at,updated_at,seller_id,shop_id,
   minimum_quantity,unlimited_quantity,quantity,contact_call,contact_whatsapp,
-  admin_posted,admin_shop_name,
+  admin_posted,admin_shop_name,description_structured,
   seller:profiles!products_seller_id_fkey(id,full_name,profile_image,whatsapp_number,call_number),
   shop:shops(id,name,logo_url,slug)
 `;
