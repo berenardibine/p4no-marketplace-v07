@@ -20,6 +20,8 @@ import ReportModal from "@/components/products/ReportModal";
 import ProductComments from "@/components/products/ProductComments";
 import ProductQA from "@/components/products/ProductQA";
 import QAJsonLd from "@/components/seo/QAJsonLd";
+import { ProductDeliveryInfo } from "@/components/products/DeliveryInfo";
+import WhyP4NOHub from "@/components/products/WhyP4NOHub";
 import StructuredProductDescription, { ProductFaqJsonLd, type StructuredDescription } from "@/components/products/StructuredProductDescription";
 import RecentlyViewed from "@/components/home/RecentlyViewed";
 import { trackBrowsingHistory } from "@/hooks/useBrowsingHistory";
@@ -595,6 +597,8 @@ const ProductDetail = () => {
             )}
           </div>
 
+          <ProductDeliveryInfo rules={(product as any).description_structured?.delivery_rules} />
+
           {/* Description with Read More */}
           {(() => {
             const structured = (product as any).description_structured as StructuredDescription | null | undefined;
@@ -635,6 +639,8 @@ const ProductDetail = () => {
               <RecentlyViewed itemType="product" excludeId={product.id} />
             </FeatureGate>
           </DeferUntilVisible>
+
+          <WhyP4NOHub />
 
           {/* Seller Info */}
           {!product.admin_posted ? (
