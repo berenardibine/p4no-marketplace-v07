@@ -8,9 +8,12 @@ export const useFollow = (targetType: FollowTarget, targetId?: string | null) =>
   const { user } = useAuth();
   const [isFollowing, setIsFollowing] = useState(false);
   const [count, setCount] = useState(0);
+  // Public follower counts are NOT fetched automatically (egress). They load
+  // only on explicit interaction via loadCount(), or after a follow toggle.
+  const [countLoaded, setCountLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const loadCount = useCallback(async () => {
     if (!targetId) return;
     const { count: c } = await supabase
       .from('follows')
@@ -18,6 +21,11 @@ export const useFollow = (targetType: FollowTarget, targetId?: string | null) =>
       .eq('target_type', targetType)
       .eq('target_id', targetId);
     setCount(c || 0);
+    setCountLoaded(true);
+  }, [targetType, targetId]);
+
+  const refresh = useCallback(async () => {
+    if (!targetId) return;
     if (user) {
       const { data } = await supabase
         .from('follows')
@@ -59,9 +67,10 @@ export const useFollow = (targetType: FollowTarget, targetId?: string | null) =>
         }
       }
       await refresh();
+      await loadCount();
       return true;
     } finally { setLoading(false); }
   };
 
-  return { isFollowing, count, loading, toggle, refresh };
+  return { isFollowing, count, countLoaded, loadCount, loading, toggle, refresh };
 };

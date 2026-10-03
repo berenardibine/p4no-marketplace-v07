@@ -23,7 +23,7 @@ const ProviderProfile = () => {
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lookup);
   const { services, loading } = useServices({ sellerId: profile?.id, limit: 24 });
 
-  const { count: followerCount } = useFollow('provider', profile?.id || null);
+  const { count: followerCount, countLoaded, loadCount } = useFollow('provider', profile?.id || null);
 
   useEffect(() => {
     if (!lookup) return;
@@ -92,7 +92,9 @@ const ProviderProfile = () => {
         <div className="flex items-center justify-center gap-3 mt-2 text-xs text-muted-foreground">
           {Number(profile.rating) > 0 && <span className="inline-flex items-center gap-0.5"><Star className="h-3 w-3 fill-amber-400 text-amber-400" />{Number(profile.rating).toFixed(1)}</span>}
           {profile.location && <span className="inline-flex items-center gap-0.5"><MapPin className="h-3 w-3" />{profile.location}</span>}
-          <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{followerCount} {followerCount === 1 ? 'follower' : 'followers'}</span>
+          {countLoaded
+            ? <span className="inline-flex items-center gap-1"><Users className="h-3 w-3" />{followerCount} {followerCount === 1 ? 'follower' : 'followers'}</span>
+            : <button type="button" onClick={loadCount} className="inline-flex items-center gap-1 underline"><Users className="h-3 w-3" />Show followers</button>}
         </div>
         <div className="flex gap-2 justify-center mt-4 flex-wrap">
           <FollowButton targetType="provider" targetId={profile.id} size="sm" />

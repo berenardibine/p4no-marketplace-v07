@@ -66,7 +66,7 @@ const ShopPage = () => {
   const [productCount, setProductCount] = useState(0);
   const loaderRef = useRef<HTMLDivElement>(null);
   const LIMIT = 20;
-  const { count: followerCount } = useFollow('shop', shopId || null);
+  const { count: followerCount, countLoaded, loadCount } = useFollow('shop', shopId || null);
 
   const fetchShop = useCallback(async () => {
     if (!shopId) return;
@@ -291,8 +291,12 @@ const ShopPage = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <Users className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">{followerCount}</span>
-              <span className="text-xs text-muted-foreground">{followerCount === 1 ? 'Follower' : 'Followers'}</span>
+              {countLoaded ? (<>
+                <span className="text-sm font-semibold">{followerCount}</span>
+                <span className="text-xs text-muted-foreground">{followerCount === 1 ? 'Follower' : 'Followers'}</span>
+              </>) : (
+                <button type="button" onClick={loadCount} className="text-xs text-muted-foreground underline">Show followers</button>
+              )}
             </div>
           </div>
         </div>
