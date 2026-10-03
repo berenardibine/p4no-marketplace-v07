@@ -20,6 +20,7 @@ import ReportModal from "@/components/products/ReportModal";
 import ProductComments from "@/components/products/ProductComments";
 import ProductQA from "@/components/products/ProductQA";
 import QAJsonLd from "@/components/seo/QAJsonLd";
+import ClickToLoad from "@/components/common/ClickToLoad";
 import { ProductDeliveryInfo } from "@/components/products/DeliveryInfo";
 import WhyP4NOHub from "@/components/products/WhyP4NOHub";
 import StructuredProductDescription, { ProductFaqJsonLd, type StructuredDescription } from "@/components/products/StructuredProductDescription";
@@ -856,11 +857,11 @@ const ProductDetail = () => {
 
           {/* Questions & Answers */}
           <div id="qa" className="bg-card rounded-2xl p-4 border">
-            <DeferUntilVisible minHeight={120}>
+            <ClickToLoad label="Show questions & answers" anchor="qa">
               <ProductQA productId={product.id} productSellerId={product.seller_id} />
-            </DeferUntilVisible>
+              <QAJsonLd productId={product.id} productName={product.title} />
+            </ClickToLoad>
           </div>
-          <QAJsonLd productId={product.id} productName={product.title} />
 
         </div>
           </div>{/* /right col */}

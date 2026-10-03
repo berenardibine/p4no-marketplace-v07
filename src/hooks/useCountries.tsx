@@ -31,8 +31,16 @@ const COLUMNS = 'id,name,iso_code,currency_code,currency_symbol,phone_code,is_ac
 const CACHE_KEY = 'countries:v3';
 const TTL = 7 * 24 * 60 * 60 * 1000;
 
-/** PostgREST read, trimmed to only the columns the UI renders. */
+/** Same-origin static snapshot first (public/reference/countries.json),
+ *  trimmed PostgREST read only if the static file is unavailable. */
 async function fetchCountriesFromDb(): Promise<Country[]> {
+  try {
+    const res = await fetch('/reference/countries.json', { cache: 'force-cache' });
+    if (res.ok) {
+      const rows = (await res.json()) as Country[];
+      if (Array.isArray(rows) && rows.length) return rows;
+    }
+  } catch { /* fall through to DB */ }
   const { data, error } = await supabase
     .from('countries')
     .select(COLUMNS)

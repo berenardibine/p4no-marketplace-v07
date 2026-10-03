@@ -628,12 +628,31 @@ function genShops(ctx: RunContext) {
     ]);
 
     const out = [ctx.stage("shops/all.json", rows)];
+    // One batched seller lookup per generation run (feeds per-shop info.json).
+    const sellerIds = [...new Set((rows as any[]).map((s) => s.seller_id).filter(Boolean))];
+    const sellers = new Map<string, any>();
+    if (sellerIds.length) {
+      const { data: profs } = await admin.from("profiles")
+        .select("id, full_name, profile_image, identity_verified, location").in("id", sellerIds);
+      for (const p of profs ?? []) sellers.set(p.id, p);
+    }
     const cards: any[] = [];
     for (const s of rows as any[]) {
       const mine = shopProducts(s, allProducts);
       if (s.is_active !== false) cards.push(shopCard(s, mine.length));
       const key = s.slug ?? s.id;
       out.push(ctx.stage(`shops/${key}/products.json`, mine.slice(0, SHOP_PRODUCTS_LIMIT).map(listCard)));
+      const p = sellers.get(s.seller_id);
+      const info = {
+        shop: {
+          id: s.id, slug: s.slug ?? null, name: s.name, description: s.description ?? null,
+          logo_url: s.logo_url ?? null, trading_center: s.trading_center ?? null,
+          contact_phone: s.contact_phone ?? null, whatsapp: s.whatsapp ?? null, seller_id: s.seller_id ?? null,
+        },
+        seller: p ? { full_name: p.full_name, profile_image: p.profile_image, identity_verified: p.identity_verified, location: p.location } : null,
+      };
+      out.push(ctx.stage(`shops/${s.id}/info.json`, info));
+      if (s.slug) out.push(ctx.stage(`shops/${s.slug}/info.json`, info));
     }
     out.push(ctx.stage("shops/active.json", cards));
     return out;

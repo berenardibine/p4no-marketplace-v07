@@ -12,6 +12,7 @@ import { sanitizePhone } from '@/lib/whatsappService';
 import { useToast } from '@/hooks/use-toast';
 import ReportModal from '@/components/products/ReportModal';
 import ServiceComments from '@/components/services/ServiceComments';
+import ClickToLoad from '@/components/common/ClickToLoad';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import GuestPromptDialog from '@/components/auth/GuestPromptDialog';
 import ServiceMetaTags from '@/components/seo/ServiceMetaTags';
@@ -299,7 +300,9 @@ const ServiceDetail = () => {
 
             {/* Comments */}
             <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-100 dark:border-blue-900/30">
-              <ServiceComments serviceId={service.id} />
+              <ClickToLoad label="Show comments" anchor="comments">
+                <ServiceComments serviceId={service.id} />
+              </ClickToLoad>
             </div>
           </div>
         </div>
