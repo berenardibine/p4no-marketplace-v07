@@ -71,6 +71,14 @@ const ShopPage = () => {
   const fetchShop = useCallback(async () => {
     if (!shopId) return;
     try {
+      // Static-first: per-shop info.json (shop + seller summary) from the CDN.
+      const info = await getContent<any>(`shops/${shopId}/info`).catch(() => null);
+      if (info?.shop) {
+        setShop(info.shop);
+        setSeller(info.seller ?? null);
+        return;
+      }
+      allowLastResortRead('shops');
       const { data } = await supabase
         .from('shops')
         .select('id, slug, name, description, logo_url, trading_center, contact_phone, whatsapp, seller_id')
