@@ -35,7 +35,7 @@ const RENTAL_UNITS = [
 const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps) => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const { categories } = useCategories();
+  const { categories, loading: categoriesLoading } = useCategories();
   const { upload, isUploading, processingStage } = useProcessedUpload({ folder: 'products', addWatermark: true });
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -450,11 +450,15 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
         <div className="space-y-2">
           <Label>Category</Label>
           <Select
-            value={formData.category}
+            value={
+              categories.find(c => c.slug === formData.category)?.slug
+              ?? categories.find(c => c.slug.startsWith(formData.category) || c.name.toLowerCase() === formData.category.toLowerCase())?.slug
+              ?? formData.category
+            }
             onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
           >
             <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Select category" />
+              <SelectValue placeholder={categoriesLoading ? "Loading categories..." : categories.length ? "Select category" : "No categories available"} />
             </SelectTrigger>
             <SelectContent className="bg-card">
               {categories.map(cat => (
