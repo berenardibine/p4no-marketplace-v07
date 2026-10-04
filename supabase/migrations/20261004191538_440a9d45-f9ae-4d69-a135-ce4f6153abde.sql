@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.trg_enqueue_seller_profile_change() FROM PUBLIC, anon, authenticated;
