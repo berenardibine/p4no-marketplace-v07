@@ -860,7 +860,13 @@ async function runJobs(ctx: RunContext, jobs: Job[]): Promise<void> {
         break;
       case "seller":
         await genHomepage(ctx);
-        if (!isDelete && key) await genSellerDetail(ctx, key);
+        if (!isDelete && key) {
+          await genSellerDetail(ctx, key);
+          // Refresh every shop owned by this seller so shop pages show current seller info.
+          const { data: owned } = await admin.from("shops").select("id,slug")
+            .or(`seller_id.eq.${key},owner_id.eq.${key}`);
+          for (const s of owned ?? []) await genShopDetail(ctx, (s as any).slug ?? (s as any).id);
+        }
         break;
       case "homepage": await genHomepage(ctx); break;
       case "feeds": await genFeeds(ctx); break;
