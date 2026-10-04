@@ -65,6 +65,14 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
     rental_unit: product?.rental_unit || 'day',
   });
 
+  // Legacy products may store an older slug/name; normalize to the matching existing category slug.
+  useEffect(() => {
+    const cur = formData.category;
+    if (!cur || !categories.length || categories.some(c => c.slug === cur)) return;
+    const m = categories.find(c => c.slug.startsWith(cur) || c.name.toLowerCase() === cur.toLowerCase());
+    if (m) setFormData(prev => ({ ...prev, category: m.slug }));
+  }, [categories]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Check if selected category is a rental category
   const isRentalCategory = formData.category?.toLowerCase().includes('rent') || 
     formData.category?.toLowerCase().includes('lent') ||

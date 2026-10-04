@@ -1,5 +1,17 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { cachedQuery } from '@/lib/queryCache';
+
+// Rwanda locations are static reference data: one read per table/parent per day, shared by all callers.
+const LOC_TTL = 24 * 60 * 60_000;
+const loadLoc = (table: 'provinces' | 'districts' | 'sectors', col?: string, val?: string) =>
+  cachedQuery<any[]>(`loc:${table}:${val ?? 'all'}`, async () => {
+    let q: any = supabase.from(table).select('*').order('name');
+    if (col && val) q = q.eq(col, val);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data ?? [];
+  }, { ttlMs: LOC_TTL });
 
 interface Province {
   id: string;
@@ -30,14 +42,8 @@ export const useLocations = () => {
 
   useEffect(() => {
     const fetchProvinces = async () => {
-      const { data, error } = await supabase
-        .from('provinces')
-        .select('*')
-        .order('name');
-      
-      if (!error && data) {
-        setProvinces(data);
-      }
+      const data = await loadLoc('provinces').catch(() => null);
+      if (data) setProvinces(data);
       setLoading(false);
     };
 
@@ -47,15 +53,8 @@ export const useLocations = () => {
   useEffect(() => {
     if (selectedProvince) {
       const fetchDistricts = async () => {
-        const { data, error } = await supabase
-          .from('districts')
-          .select('*')
-          .eq('province_id', selectedProvince)
-          .order('name');
-        
-        if (!error && data) {
-          setDistricts(data);
-        }
+        const data = await loadLoc('districts', 'province_id', selectedProvince).catch(() => null);
+        if (data) setDistricts(data);
       };
 
       fetchDistricts();
@@ -68,15 +67,8 @@ export const useLocations = () => {
   useEffect(() => {
     if (selectedDistrict) {
       const fetchSectors = async () => {
-        const { data, error } = await supabase
-          .from('sectors')
-          .select('*')
-          .eq('district_id', selectedDistrict)
-          .order('name');
-        
-        if (!error && data) {
-          setSectors(data);
-        }
+        const data = await loadLoc('sectors', 'district_id', selectedDistrict).catch(() => null);
+        if (data) setSectors(data);
       };
 
       fetchSectors();
