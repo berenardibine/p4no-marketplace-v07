@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react';
 import CategoryPage from './CategoryPage';
 import SitePage from './SitePage';
 import NotFound from './NotFound';
+import { loadCategoryRows } from '@/hooks/useCategories';
 
 /**
  * Resolves a top-level /:slug to either a category page or a site page.
@@ -21,13 +22,9 @@ const DynamicSlugPage = () => {
       setResolvedType(null);
       
       // Check category first
-      const { data: cat } = await supabase
-        .from('categories')
-        .select('id')
-        .eq('slug', slug)
-        .maybeSingle();
-      
-      if (cat) { setResolvedType('category'); return; }
+      // Static/cached category list — no per-slug PostgREST lookup.
+      const cats = await loadCategoryRows().catch(() => [] as any[]);
+      if (cats.some((c: any) => c.slug === slug)) { setResolvedType('category'); return; }
 
       // Check site_pages
       const { data: page } = await supabase

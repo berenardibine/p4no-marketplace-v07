@@ -127,7 +127,18 @@ async function selfHeal(path: string): Promise<boolean> {
  * Never falls back to PostgREST — either the file appears in the manifest or we surface
  * a real miss to the caller (who should render a 404).
  */
-export async function waitForPath(path: string, timeoutMs = 8000): Promise<boolean> {
+const waitInflight = new Map<string, Promise<boolean>>();
+export function waitForPath(path: string, timeoutMs = 8000): Promise<boolean> {
+  const key = path.replace(/^\/+/, '').replace(/\.json$/, '');
+  const hit = waitInflight.get(key);
+  if (hit) return hit;
+  const p = waitForPathOnce(path, timeoutMs).finally(() => {
+    setTimeout(() => waitInflight.delete(key), 60_000);
+  });
+  waitInflight.set(key, p);
+  return p;
+}
+async function waitForPathOnce(path: string, timeoutMs: number): Promise<boolean> {
   const clean = path.replace(/^\/+/, '').replace(/\.json$/, '');
   try {
     const { data } = await supabase.functions.invoke('static-queue-status', {

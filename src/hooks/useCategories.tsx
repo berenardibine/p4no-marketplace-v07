@@ -8,7 +8,7 @@ import { cachedQuery } from '@/lib/queryCache';
 // produced its own request. One fetch per 10 minutes, shared by all callers.
 const CATEGORY_TTL = 10 * 60_000;
 
-const loadCategoryRows = (): Promise<any[]> =>
+export const loadCategoryRows = (): Promise<any[]> =>
   cachedQuery<any[]>('categories:all:v1', async () => {
     const rows = await getContent<any[]>('categories/all');
     if (rows) return rows;

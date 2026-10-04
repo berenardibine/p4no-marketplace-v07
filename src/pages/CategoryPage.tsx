@@ -103,7 +103,9 @@ const CategoryPage = () => {
           setTotalCount(cached.length);
         } else {
           // Wait for a queued generation before ever asking PostgREST.
-          const built = await waitForPath(`categories/${slug}/page-1`);
+          // Only unknown-to-CDN but real categories can be mid-generation.
+          const known = ((await getCachedCategories()) as any[] | null)?.some((c) => c.slug === slug);
+          const built = known ? await waitForPath(`categories/${slug}/page-1`) : false;
           if (built) {
             const retry = await getContent<Product[]>(`categories/${slug}/page-1`);
             if (Array.isArray(retry)) newItems = retry.slice(0, PAGE_SIZE);
