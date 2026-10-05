@@ -42,6 +42,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
   const [aiDescLoading, setAiDescLoading] = useState(false);
   const [aiEnhanceLoading, setAiEnhanceLoading] = useState(false);
   const [structured, setStructured] = useState<any>((product as any)?.description_structured || null);
+  const [soldOut, setSoldOut] = useState<boolean>(!!(product as any)?.description_structured?.sold_out);
   const [deliveryRules, setDeliveryRules] = useState<DeliveryRule[]>(((product as any)?.description_structured?.delivery_rules) || []);
   const [images, setImages] = useState<string[]>(product?.images || []);
   const [processingImages, setProcessingImages] = useState<Set<number>>(new Set());
@@ -124,6 +125,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       if (data?.error) throw new Error(data.error);
       setStructured(data.description_structured || null);
       if (data.description_structured?.delivery_rules) setDeliveryRules(data.description_structured.delivery_rules);
+      setSoldOut(!!data.description_structured?.sold_out);
       if (data?.tags?.length) setTagsInput(data.tags.join(', '));
       // Short description stays short (max ~50 words); rich content lives in the structured fields
       const ds = data.description_structured;
@@ -260,7 +262,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       const productData: any = {
         title: formData.title,
         description: formData.description,
-        description_structured: (() => { const r = deliveryRules.filter(d => d.country.trim()); const base = { ...(structured || {}) }; delete base.delivery_rules; return r.length ? { ...base, delivery_rules: r } : (Object.keys(base).length ? base : null); })(),
+        description_structured: (() => { const r = deliveryRules.filter(d => d.country.trim()); const base: any = { ...(structured || {}) }; delete base.delivery_rules; delete base.sold_out; if (soldOut) base.sold_out = true; return r.length ? { ...base, delivery_rules: r } : (Object.keys(base).length ? base : null); })(),
         slug: product?.slug || slugify(formData.title),
         price: formData.price ? parseFloat(formData.price) : 0,
         quantity: parseInt(formData.quantity),
@@ -608,6 +610,14 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
         </div>
 
         <DeliveryRulesEditor value={deliveryRules} onChange={setDeliveryRules} />
+        {product && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border p-3">
+            <span className="text-sm">Status: <span className={soldOut ? 'font-semibold text-destructive' : 'font-semibold text-primary'}>{soldOut ? 'Sold Out' : 'Available'}</span></span>
+            <Button type="button" variant={soldOut ? 'default' : 'outline'} size="sm" onClick={() => setSoldOut(v => !v)}>
+              {soldOut ? 'Mark as Available' : 'Mark as Sold Out'}
+            </Button>
+          </div>
+        )}
 
         {/* Tags */}
         <div className="space-y-2">
