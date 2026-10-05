@@ -134,7 +134,6 @@ export const useInstantOrder = () => {
         }],
         buyerName: name,
         orderId: order.id.slice(0, 6).toUpperCase(),
-        delivery: params.delivery,
       });
       openWhatsApp(wa, msg);
       return true;
@@ -234,6 +233,7 @@ export const useInstantOrder = () => {
         items: msgItems,
         buyerName: name,
         orderId: order.id.slice(0, 6).toUpperCase(),
+        delivery: params.delivery,
       });
       openWhatsApp(wa, msg);
       return true;
