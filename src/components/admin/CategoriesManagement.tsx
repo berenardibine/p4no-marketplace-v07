@@ -1,3 +1,4 @@
+import { allowLastResortRead } from "@/lib/apiFirewall";
 import { useState, useEffect } from "react";
 import { 
   Tag, Plus, Edit, Trash2, MoreVertical, Search, 
@@ -70,12 +71,14 @@ const CategoriesManagement = () => {
 
   const fetchCategories = async () => {
     setLoading(true);
+    allowLastResortRead('categories');
     const { data: categoriesData, error } = await supabase
       .from('categories')
       .select('*')
       .order('name');
     
     if (categoriesData) {
+      allowLastResortRead('products', categoriesData.length);
       // Get product counts for each category
       const categoriesWithCounts = await Promise.all(
         categoriesData.map(async (cat) => {

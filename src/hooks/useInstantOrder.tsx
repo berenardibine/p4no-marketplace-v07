@@ -160,6 +160,7 @@ export const useInstantOrder = () => {
     }>;
     buyerName?: string;
     buyerPhone?: string;
+    delivery?: { fee: number; label?: string | null; destination?: string };
   }): Promise<boolean> => {
     const wa = sanitizePhone(params.sellerWhatsapp);
     if (!wa) {
@@ -232,6 +233,7 @@ export const useInstantOrder = () => {
         items: msgItems,
         buyerName: name,
         orderId: order.id.slice(0, 6).toUpperCase(),
+        delivery: params.delivery,
       });
       openWhatsApp(wa, msg);
       return true;
