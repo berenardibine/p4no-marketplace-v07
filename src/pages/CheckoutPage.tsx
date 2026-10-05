@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useInstantOrder } from "@/hooks/useInstantOrder";
+import { useGeo } from "@/context/GeoContext";
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -55,7 +56,25 @@ const CheckoutPage = () => {
     })();
   }, [items[0]?.sellerId]);
 
-  const totalPrice = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // One seller per cart → one delivery fee per order, from that seller's rules.
+  const { country: detectedCountry } = useGeo();
+  const rules = items.find(i => i.deliveryRules?.length)?.deliveryRules || [];
+  const countryOpts = Array.from(new Set(rules.map(r => r.country).filter(Boolean)));
+  const [dest, setDest] = useState('');
+  const [destCity, setDestCity] = useState('');
+  useEffect(() => {
+    if (dest || !countryOpts.length) return;
+    const d = countryOpts.find(c => c.toLowerCase() === (detectedCountry || '').toLowerCase());
+    setDest(d || countryOpts[0]);
+  }, [countryOpts.join('|'), detectedCountry]); // eslint-disable-line react-hooks/exhaustive-deps
+  const n = (s?: string) => (s || '').trim().toLowerCase();
+  const inCountry = rules.filter(r => n(r.country) === n(dest));
+  const cityOpts = inCountry.map(r => r.location || '').filter(Boolean);
+  const rule = inCountry.find(r => r.location && n(r.location) === n(destCity)) || inCountry.find(r => !r.location) || (cityOpts.length ? undefined : inCountry[0]);
+  const deliveryFee = rule && !rule.contact && !rule.free && rule.fee != null ? Number(rule.fee) : 0;
+  const deliveryLabel = !rule || rule.contact || (!rule.free && rule.fee == null) ? 'Contact seller' : rule.free ? 'Free' : null;
+  const totalPrice = subtotal + deliveryFee;
 
   const handleQuantityChange = (id: string, delta: number) => {
     const item = items.find(i => i.id === id);
@@ -174,6 +193,29 @@ const CheckoutPage = () => {
         </div>
 
         <div className="bg-card rounded-2xl border p-4">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span>{items[0]?.currencySymbol || 'Fr'} {new Intl.NumberFormat().format(subtotal)}</span>
+          </div>
+          {countryOpts.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              <select aria-label="Delivery country" value={dest} onChange={e => { setDest(e.target.value); setDestCity(''); }}
+                className="h-9 flex-1 min-w-[120px] rounded-lg border border-input bg-background px-2 text-sm">
+                {countryOpts.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {cityOpts.length > 0 && (
+                <select aria-label="Delivery city" value={destCity} onChange={e => setDestCity(e.target.value)}
+                  className="h-9 flex-1 min-w-[120px] rounded-lg border border-input bg-background px-2 text-sm">
+                  <option value="">{inCountry.some(r => !r.location) ? 'Other location' : 'Select city'}</option>
+                  {cityOpts.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+            </div>
+          )}
+          <div className="flex justify-between text-sm mb-3 pb-3 border-b">
+            <span className="text-muted-foreground">Delivery</span>
+            <span>{deliveryLabel ?? `${rule?.currency || items[0]?.currencySymbol || 'Fr'} ${new Intl.NumberFormat().format(deliveryFee)}`}</span>
+          </div>
           <div className="flex justify-between items-center">
             <span className="font-semibold">Total</span>
             <span className="text-xl font-bold text-primary">
