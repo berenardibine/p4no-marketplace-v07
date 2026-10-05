@@ -3,16 +3,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { getContent } from '@/lib/cdnGuard';
 import { isStrictStaticMode } from '@/lib/staticFlags';
 import { cachedQuery } from '@/lib/queryCache';
+import { allowLastResortRead } from '@/lib/apiFirewall';
 
 // Categories are read by ~12 components. Without a shared cache each mount
 // produced its own request. One fetch per 10 minutes, shared by all callers.
 const CATEGORY_TTL = 10 * 60_000;
 
 export const loadCategoryRows = (): Promise<any[]> =>
-  cachedQuery<any[]>('categories:all:v1', async () => {
+  cachedQuery<any[]>('categories:all:v2', async () => {
     const rows = await getContent<any[]>('categories/all');
-    if (rows) return rows;
-    if (isStrictStaticMode()) return [];
+    if (rows && rows.length) return rows;
+    // Static file missing/empty: one sanctioned read so forms never show "no categories".
+    if (isStrictStaticMode()) allowLastResortRead('categories');
     const { data, error } = await supabase
       .from('categories')
       .select('id, name, slug, icon, type')
