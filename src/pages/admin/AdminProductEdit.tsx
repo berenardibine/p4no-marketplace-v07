@@ -584,7 +584,7 @@ const AdminProductEdit = () => {
         <div className="space-y-2">
           <Label>Category</Label>
           <Select
-            value={formData.category}
+            value={categories.find(c => c.slug === formData.category)?.slug ?? categories.find(c => formData.category && (c.slug.startsWith(formData.category) || c.name.toLowerCase() === formData.category.toLowerCase()))?.slug ?? formData.category}
             onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
           >
             <SelectTrigger className="rounded-xl">
