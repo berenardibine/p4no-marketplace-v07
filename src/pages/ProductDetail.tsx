@@ -735,12 +735,13 @@ const ProductDetail = () => {
             </div>
           )}
 
-          {/* Order Buttons — same flow as Mark: add to cart with quantity, then floating bar to checkout */}
+          {/* Order Buttons — single-seller cart */}
           <div className="bg-background rounded-2xl p-4 space-y-3">
-            <Button
-              size="lg"
-              onClick={() => requireAuth(() => {
+            {(() => {
+              const soldOut = !!(product as any).description_structured?.sold_out;
+              const toCart = (go: boolean) => requireAuth(() => {
                 const sellId = product.seller?.id || product.seller_id;
+                const go2 = () => go && navigate('/checkout');
                 const ok = cart.addItem({
                   id: product.id,
                   title: product.title,
@@ -752,38 +753,28 @@ const ProductDetail = () => {
                   sellerId: sellId,
                   sellerName: product.shop?.name || product.seller?.full_name || 'Seller',
                   currencySymbol: product.currency_symbol,
-                });
-                if (ok) navigate('/checkout');
-              })}
-              className="w-full gap-2 h-14 rounded-xl bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-600 text-primary-foreground font-bold shadow-lg"
-            >
-              <ShoppingBag className="h-5 w-5" />
-              Order Now — Choose Quantity & Checkout
-            </Button>
-            <Button
-              onClick={() => requireAuth(() => {
-                const sellId = product.seller?.id || product.seller_id;
-                cart.addItem({
-                  id: product.id,
-                  title: product.title,
-                  price: product.price,
-                  image: images[0],
-                  maxQuantity: product.quantity || 999,
-                  minQuantity: (product as any).minimum_quantity || 1,
-                  unlimitedQuantity: (product as any).unlimited_quantity || false,
-                  sellerId: sellId,
-                  sellerName: product.shop?.name || product.seller?.full_name || 'Seller',
-                  currencySymbol: product.currency_symbol,
-                });
-              })}
-              variant="outline"
-              size="lg"
-              className="w-full gap-2 rounded-xl border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-all"
-            >
-              <Heart className="h-4 w-4" />
-              Mark / Add to Order List
-            </Button>
-
+                  deliveryRules: (product as any).description_structured?.delivery_rules || null,
+                }, go2);
+                if (ok) go2();
+              });
+              if (soldOut) return (
+                <div className="w-full h-14 rounded-xl bg-muted text-muted-foreground font-bold flex items-center justify-center">
+                  Sold Out
+                </div>
+              );
+              return (<>
+                <Button size="lg" onClick={() => toCart(true)}
+                  className="w-full gap-2 h-14 rounded-xl bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-600 text-primary-foreground font-bold shadow-lg">
+                  <ShoppingBag className="h-5 w-5" />
+                  Order Now — Choose Quantity & Checkout
+                </Button>
+                <Button onClick={() => toCart(false)} variant="outline" size="lg"
+                  className="w-full gap-2 rounded-xl border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-all">
+                  <ShoppingBag className="h-4 w-4" />
+                  Add to Cart
+                </Button>
+              </>);
+            })()}
           </div>
 
           {/* Contact Buttons Section */}
