@@ -104,6 +104,7 @@ const CheckoutPage = () => {
       })),
       buyerName: form.name.trim(),
       buyerPhone: form.phone.trim(),
+      delivery: countryOpts.length ? { fee: deliveryFee, label: deliveryLabel, destination: [destCity, dest].filter(Boolean).join(', ') } : undefined,
     });
     if (ok) {
       setSuccess(true);

@@ -12,18 +12,23 @@ export interface BuildMessageInput {
   items: OrderItemForMsg[];
   buyerName?: string;
   orderId?: string; // short id (last 6 chars)
+  delivery?: { fee: number; label?: string | null; destination?: string };
 }
 
 const fmt = (n: number) => new Intl.NumberFormat().format(n);
 
-export function buildOrderMessage({ items, buyerName, orderId }: BuildMessageInput): string {
+export function buildOrderMessage({ items, buyerName, orderId, delivery }: BuildMessageInput): string {
   if (!items.length) return '';
   const greeting = buyerName
     ? `Hello! I'm ${buyerName} from P4NO 👋`
     : `Hello! I'm interested in ordering from P4NO 👋`;
 
   const sym = items[0].currency_symbol || '';
-  const grandTotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+  const subTotal = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+  const grandTotal = subTotal + (delivery?.fee || 0);
+  const deliveryLine = delivery
+    ? `🚚 Delivery${delivery.destination ? ` (${delivery.destination})` : ''}: ${delivery.label || `${sym} ${fmt(delivery.fee)}`}`
+    : '';
 
   if (items.length === 1) {
     const it = items[0];
@@ -32,7 +37,9 @@ export function buildOrderMessage({ items, buyerName, orderId }: BuildMessageInp
       '',
       `📦 ${it.title}`,
       `🔢 Qty: ${it.quantity}`,
-      `💰 ${sym} ${fmt(it.unit_price)} (Total: ${sym} ${fmt(it.unit_price * it.quantity)})`,
+      `💰 ${sym} ${fmt(it.unit_price)} (Subtotal: ${sym} ${fmt(subTotal)})`,
+      deliveryLine,
+      delivery ? `💰 Total: ${sym} ${fmt(grandTotal)}` : '',
       `🔗 ${it.url}`,
       orderId ? `\nOrder #${orderId}` : '',
       'Please share more details. Thank you!',
@@ -49,6 +56,7 @@ export function buildOrderMessage({ items, buyerName, orderId }: BuildMessageInp
       ''
     );
   });
+  if (delivery) lines.push(`Subtotal: ${sym} ${fmt(subTotal)}`, deliveryLine);
   lines.push(`💰 Grand total: ${sym} ${fmt(grandTotal)}`);
   if (orderId) lines.push(`Order #${orderId}`);
   lines.push('Please share more details. Thank you!');
