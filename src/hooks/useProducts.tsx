@@ -210,7 +210,7 @@ export const useProduct = (productId: string | undefined) => {
         // Ignore view count errors
       }
       
-      setProduct(data);
+      setProduct(data as any);
     } catch (err: any) {
       console.error('Error fetching product:', err);
       setError(err.message || 'Failed to load product');
