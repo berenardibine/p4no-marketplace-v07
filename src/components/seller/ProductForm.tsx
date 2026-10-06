@@ -38,8 +38,6 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
   const { categories, loading: categoriesLoading } = useCategories();
   const { upload, isUploading, processingStage } = useProcessedUpload({ folder: 'products', addWatermark: true });
   const [loading, setLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiDescLoading, setAiDescLoading] = useState(false);
   const [aiEnhanceLoading, setAiEnhanceLoading] = useState(false);
   const [structured, setStructured] = useState<any>((product as any)?.description_structured || null);
   const [soldOut, setSoldOut] = useState<boolean>(!!(product as any)?.description_structured?.sold_out);
@@ -86,30 +84,6 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       .replace(/-+/g, "-")
       .slice(0, 60);
 
-  const generateAi = async (mode: "fill" | "regenerate") => {
-    if (!formData.title || formData.title.length < 3) return;
-    const setter = mode === "regenerate" ? setAiDescLoading : setAiLoading;
-    setter(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('seo-suggest', {
-        body: { title: formData.title, category: formData.category, mode },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (data?.seo_description) {
-        setFormData(prev => ({
-          ...prev,
-          title: mode === "regenerate" ? prev.title : (data.seo_title || prev.title),
-          description: data.seo_description,
-        }));
-        toast({ title: "✨ AI description ready", description: `${data.seo_description.length} characters generated.` });
-      }
-    } catch (err: any) {
-      toast({ title: "AI generation failed", description: err.message || "Please retry.", variant: "destructive" });
-    } finally {
-      setter(false);
-    }
-  };
 
   const enhanceWithAi = async () => {
     if (!formData.title || formData.title.length < 3) {
