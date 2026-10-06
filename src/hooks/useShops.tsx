@@ -21,7 +21,7 @@ export interface Shop {
   seller_id: string;
   owner_id: string | null;
   created_at: string | null;
-  delivery_rules?: any[] | null;
+  delivery_rules?: any;
 }
 
 export const useMyShop = () => {
