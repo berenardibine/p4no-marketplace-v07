@@ -1,3 +1,4 @@
+import type { DeliveryRule } from '@/components/products/DeliveryInfo';
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
@@ -48,7 +49,8 @@ const CheckoutPage = () => {
     setSellerLoading(true);
     (async () => {
       try {
-        const { data } = await supabase.from('profiles').select('whatsapp_number,call_number').eq('id', sellerId).maybeSingle();
+        const { data: c } = await supabase.rpc('get_seller_contact' as any, { _seller_id: sellerId });
+        const data: any = Array.isArray(c) ? c[0] : c;
         setSellerWa(data?.whatsapp_number || data?.call_number || null);
       } finally {
         setSellerLoading(false);
@@ -59,7 +61,16 @@ const CheckoutPage = () => {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   // One seller per cart → one delivery fee per order, from that seller's rules.
   const { country: detectedCountry } = useGeo();
-  const rules = items.find(i => i.deliveryRules?.length)?.deliveryRules || [];
+  // Product-level rules override; otherwise the seller's shop default rules.
+  const [shopRules, setShopRules] = useState<any[]>([]);
+  const productRules = items.find(i => i.deliveryRules?.length)?.deliveryRules;
+  useEffect(() => {
+    const sellerId = items[0]?.sellerId;
+    if (!sellerId || productRules?.length) { setShopRules([]); return; }
+    supabase.from('shops').select('delivery_rules').eq('seller_id', sellerId).limit(1).maybeSingle()
+      .then(({ data }) => setShopRules(Array.isArray((data as any)?.delivery_rules) ? (data as any).delivery_rules : []));
+  }, [items[0]?.sellerId, !!productRules?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rules: DeliveryRule[] = productRules?.length ? productRules : shopRules;
   const countryOpts = Array.from(new Set(rules.map(r => r.country).filter(Boolean)));
   const [dest, setDest] = useState('');
   const [destCity, setDestCity] = useState('');

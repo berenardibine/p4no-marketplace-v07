@@ -21,6 +21,7 @@ export interface Shop {
   seller_id: string;
   owner_id: string | null;
   created_at: string | null;
+  delivery_rules?: any[] | null;
 }
 
 export const useMyShop = () => {
@@ -69,6 +70,7 @@ export const useMyShop = () => {
           contact_phone: profile.call_number || profile.phone_number,
           whatsapp: profile.whatsapp_number,
           trading_center: shopData.trading_center,
+          delivery_rules: (shopData as any).delivery_rules ?? null,
           province_id: profile.province_id,
           district_id: profile.district_id,
           sector_id: profile.sector_id,

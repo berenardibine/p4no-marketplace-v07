@@ -83,6 +83,17 @@ async function releaseLock() {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  // Admin-only: validate caller JWT and admin role before any protected work.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const deny = (status: number, error: string) =>
+    new Response(JSON.stringify({ error }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  if (!token) return deny(401, "Unauthorized");
+  const { data: u, error: uErr } = await admin.auth.getUser(token);
+  if (uErr || !u?.user) return deny(401, "Unauthorized");
+  const { data: isAdmin } = await admin.rpc("has_role", { _user_id: u.user.id, _role: "admin" });
+  if (!isAdmin) return deny(403, "Forbidden");
+
   let locked = false;
   const startedAll = Date.now();
   try {
