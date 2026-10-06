@@ -4591,6 +4591,7 @@ export type Database = {
           cover_image_url: string | null
           created_at: string | null
           currency_code: string | null
+          delivery_rules: Json | null
           description: string | null
           district_id: string | null
           id: string
@@ -4618,6 +4619,7 @@ export type Database = {
           cover_image_url?: string | null
           created_at?: string | null
           currency_code?: string | null
+          delivery_rules?: Json | null
           description?: string | null
           district_id?: string | null
           id?: string
@@ -4645,6 +4647,7 @@ export type Database = {
           cover_image_url?: string | null
           created_at?: string | null
           currency_code?: string | null
+          delivery_rules?: Json | null
           description?: string | null
           district_id?: string | null
           id?: string
@@ -6161,6 +6164,13 @@ export type Database = {
           sponsored: boolean
           title: string
           views: number
+        }[]
+      }
+      get_seller_contact: {
+        Args: { _seller_id: string }
+        Returns: {
+          call_number: string
+          whatsapp_number: string
         }[]
       }
       gettransactionid: { Args: never; Returns: unknown }

@@ -35,7 +35,7 @@ const SELECT = `
   id,title,description,price,currency_symbol,video_url,video_thumbnail,images,slug,
   seller_id,shop_id,contact_call,contact_whatsapp,minimum_quantity,unlimited_quantity,
   quantity,views,likes,admin_posted,admin_shop_name,
-  seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number),
+  seller:profiles!products_seller_id_fkey(id, full_name, profile_image),
   shop:shops(id, name, logo_url, slug)
 `;
 

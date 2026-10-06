@@ -12,7 +12,7 @@ export const PRODUCT_CARD_FIELDS = `
 
 export const PRODUCT_CARD_WITH_RELATIONS = `
   ${PRODUCT_CARD_FIELDS},
-  seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number),
+  seller:profiles!products_seller_id_fkey(id, full_name, profile_image),
   shop:shops(id, name, logo_url, trading_center)
 `;
 
@@ -23,7 +23,7 @@ export const SERVICE_CARD_FIELDS = `
 
 export const SERVICE_CARD_WITH_RELATIONS = `
   ${SERVICE_CARD_FIELDS},
-  seller:profiles!services_seller_id_fkey(id, full_name, profile_image, identity_verified, rating, rating_count, whatsapp_number, call_number)
+  seller:profiles!services_seller_id_fkey(id, full_name, profile_image, identity_verified, rating, rating_count)
 `;
 
 export const ARTICLE_CARD_FIELDS = `

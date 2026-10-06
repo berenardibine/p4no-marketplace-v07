@@ -37,9 +37,14 @@ const ProviderProfile = () => {
         return;
       }
       if (isStrictStaticMode()) return; // strict mode: never fall back to DB
-      const q = supabase.from('profiles').select('*');
+      const q = supabase.from('profiles').select('id, full_name, business_name, bio, profile_image, rating, rating_count, identity_verified, is_verified, city, region, country, slug, created_at');
       const { data } = await (isUuid ? q.eq('id', lookup) : q.eq('slug', lookup)).maybeSingle();
       if (cancelled) return;
+      if (data?.id) {
+        const { data: c } = await supabase.rpc('get_seller_contact' as any, { _seller_id: data.id });
+        const row: any = Array.isArray(c) ? c[0] : c;
+        if (row) Object.assign(data as any, row);
+      }
       setProfile(data);
       if (data?.id) logActivity({ event_type: 'provider_view', entity_type: 'provider', entity_id: data.id });
     })();

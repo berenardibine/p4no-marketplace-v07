@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useCloudinaryUpload } from "@/hooks/useCloudinaryUpload";
 import { validateImageFile } from "@/lib/cloudinary";
+import { DeliveryRulesEditor, type DeliveryRule } from "@/components/products/DeliveryInfo";
 
 interface ShopFormProps {
   shop?: any;
@@ -31,6 +32,7 @@ const ShopForm = ({ shop, onSubmit, onCancel }: ShopFormProps) => {
     logo_url: shop?.logo_url || '',
     cover_image_url: shop?.cover_image_url || '',
   });
+  const [deliveryRules, setDeliveryRules] = useState<DeliveryRule[]>(Array.isArray(shop?.delivery_rules) ? shop.delivery_rules : []);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,7 +78,8 @@ const ShopForm = ({ shop, onSubmit, onCancel }: ShopFormProps) => {
     }
     setLoading(true);
     try {
-      await onSubmit(formData);
+      const r = deliveryRules.filter(d => d.country.trim());
+      await onSubmit({ ...formData, delivery_rules: r.length ? r : null });
     } finally {
       setLoading(false);
     }
@@ -203,6 +206,12 @@ const ShopForm = ({ shop, onSubmit, onCancel }: ShopFormProps) => {
             onChange={(e) => setFormData(prev => ({ ...prev, trading_center: e.target.value }))}
             placeholder="e.g., Nyabugogo Market, Kimironko Market"
           />
+        </div>
+
+        {/* Default delivery rules (used for all this shop's products unless a product overrides) */}
+        <div className="rounded-xl border border-border p-4 space-y-2">
+          <p className="text-xs text-muted-foreground">Default delivery fees for your products. Charged once per order.</p>
+          <DeliveryRulesEditor value={deliveryRules} onChange={setDeliveryRules} />
         </div>
 
         {/* Contact Info (Auto-filled) */}
