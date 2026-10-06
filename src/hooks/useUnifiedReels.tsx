@@ -32,14 +32,14 @@ const PAGE_SIZE = 8;
 const PRODUCT_SELECT = `
   id,title,description,price,currency_symbol,video_url,video_thumbnail,images,slug,
   seller_id,shop_id,contact_call,contact_whatsapp,views,likes,category,created_at,
-  seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number),
+  seller:profiles!products_seller_id_fkey(id, full_name, profile_image),
   shop:shops(id, name, logo_url, slug)
 `;
 
 const SERVICE_SELECT = `
   id,title,description,price,currency_symbol,video_url,video_thumbnail,images,slug,
   seller_id,phone_number,whatsapp_number,views,likes,category,created_at,
-  seller:profiles!services_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number)
+  seller:profiles!services_seller_id_fkey(id, full_name, profile_image)
 `;
 
 export const useUnifiedReels = (mode: UnifiedReelMode = 'foryou', startId?: string | null, kindFilter?: UnifiedReelKind) => {

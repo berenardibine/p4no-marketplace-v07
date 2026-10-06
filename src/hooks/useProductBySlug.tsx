@@ -123,7 +123,7 @@ export const useProductBySlug = (slugOrId: string | undefined) => {
             .from('products')
             .select(`
               *,
-              seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number, identity_verified),
+              seller:profiles!products_seller_id_fkey(id, full_name, profile_image, identity_verified),
               shop:shops(id, name, logo_url, trading_center, slug)
             `);
 

@@ -184,7 +184,7 @@ export const useProduct = (productId: string | undefined) => {
         .from('products')
         .select(`
           *,
-          seller:profiles!products_seller_id_fkey(id, full_name, profile_image, whatsapp_number, call_number),
+          seller:profiles!products_seller_id_fkey(id, full_name, profile_image),
           shop:shops(id, name, logo_url, trading_center)
         `)
         .eq('id', productId)
