@@ -355,28 +355,14 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
 
         {/* Product Name */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="title">Product Name *</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-7 rounded-lg border-primary/30 text-primary hover:bg-primary/5"
-              disabled={!formData.title || formData.title.length < 3 || aiLoading}
-              onClick={() => generateAi("fill")}
-            >
-              {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              AI Optimize
-            </Button>
-          </div>
+          <Label htmlFor="title">Product Name *</Label>
           <Input
             id="title"
             value={formData.title}
             onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-            placeholder="Enter product name (min 3 chars for AI)"
+            placeholder="Enter product name"
             required
           />
-          <p className="text-xs text-muted-foreground">Type a name then tap "AI Optimize" for SEO suggestions</p>
         </div>
 
         {/* Price & Quantity */}
@@ -539,38 +525,12 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
 
         {/* Description */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="description">Description * <span className="text-xs text-muted-foreground">(max 50 words)</span></Label>
-            <div className="flex gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-7 rounded-lg border-amber-500/40 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-              disabled={!formData.title || formData.title.length < 3 || aiEnhanceLoading}
-              onClick={enhanceWithAi}
-            >
-              {aiEnhanceLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              Enhance with AI
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-7 rounded-lg border-primary/30 text-primary hover:bg-primary/5"
-              disabled={!formData.title || formData.title.length < 3 || aiDescLoading}
-              onClick={() => generateAi("regenerate")}
-            >
-              {aiDescLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              {formData.description ? "Regenerate" : "Generate"}
-            </Button>
-            </div>
-          </div>
+          <Label htmlFor="description">Description * <span className="text-xs text-muted-foreground">(max 50 words)</span></Label>
           <Textarea
             id="description"
             value={formData.description}
             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Short, clear description (up to 50 words). Tap Generate for an AI draft."
+            placeholder="Write a short, clear description in your own words (up to 50 words)."
             rows={5}
             required
           />
