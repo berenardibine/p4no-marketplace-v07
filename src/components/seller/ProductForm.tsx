@@ -105,7 +105,7 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
       const ds = data.description_structured;
       if (ds?.overview) {
         const words = String(ds.overview).trim().split(/\s+/);
-        setFormData(prev => ({ ...prev, description: words.slice(0, 200).join(' ') }));
+        setFormData(prev => ({ ...prev, description: words.slice(0, 800).join(' ') }));
       }
       toast({ title: "✨ Enhanced with AI", description: "Structured content, tags & FAQs generated." });
     } catch (err: any) {
@@ -222,10 +222,10 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
 
     // Description: required, maximum 50 words
     const descWords = (formData.description || "").trim().split(/\s+/).filter(Boolean).length;
-    if (descWords === 0 || descWords > 200) {
+    if (descWords === 0 || descWords > 800) {
       toast({
         title: descWords === 0 ? "Description required" : "Description too long",
-        description: `Use up to 200 words (currently ${descWords}).`,
+        description: `Use up to 800 words (currently ${descWords}).`,
         variant: "destructive",
       });
       return;
@@ -525,21 +525,21 @@ const ProductForm = ({ product, shopId, onSuccess, onCancel }: ProductFormProps)
 
         {/* Description */}
         <div className="space-y-2">
-          <Label htmlFor="description">Description * <span className="text-xs text-muted-foreground">(max 50 words)</span></Label>
+          <Label htmlFor="description">Description * <span className="text-xs text-muted-foreground">(max 800 words)</span></Label>
           <Textarea
             id="description"
             value={formData.description}
             onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-            placeholder="Write a short, clear description in your own words (up to 200 words)."
+            placeholder="Write a short, clear description in your own words (up to 800 words)."
             rows={5}
             required
           />
           {(() => { const wc = (formData.description || '').trim().split(/\s+/).filter(Boolean).length; return (
           <div className="flex items-center justify-between text-xs">
-            <span className={wc > 200 ? "text-destructive" : "text-muted-foreground"}>
-              {wc} / 200 words
+            <span className={wc > 800 ? "text-destructive" : "text-muted-foreground"}>
+              {wc} / 800 words
             </span>
-            {wc > 200 && <span className="text-destructive">{wc - 200} too many</span>}
+            {wc > 800 && <span className="text-destructive">{wc - 800} too many</span>}
           </div>); })()}
         </div>
 
